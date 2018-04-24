@@ -36,10 +36,6 @@ class UnitViewWidget(QLabel):
         self.setMargin(0)
         self.setLineWidth(BORDER_WIDTH / 2)
 
-        self.setStyleSheet("QWidget { border: %spx solid white; background-color: white }" % str(BORDER_WIDTH / 2))
-
-        self.setFrameShape(QFrame.Box)
-
     def mousePressEvent(self, QMouseEvent):
         self.clicked.emit()
 
@@ -91,9 +87,10 @@ class LayerViewWidget(QScrollArea):
         for position, unit in itertools.izip(positions, units):
             unitView = UnitViewWidget()
             unitView.clicked.connect(self.unit_clicked_action)
-            unitView.index = position[0]*self.n_w+position[1]
+            unitView.index = position[0] * self.n_w + position[1]
             scaled_image = unit.scaledToWidth(displayed_unit_width)
             unitView.setPixmap(scaled_image)
+            unitView.setFixedSize(QSize(d, d))
             self.grid.addWidget(unitView, *position)
         last_clicked_position = (self.clicked_unit_index // self.n_w, np.remainder(self.clicked_unit_index, self.n_w))
         lastClicked = self.grid.itemAtPosition(last_clicked_position[0], last_clicked_position[1]).widget()
@@ -104,11 +101,10 @@ class LayerViewWidget(QScrollArea):
         last_clicked_position = (self.clicked_unit_index // self.n_w, np.remainder(self.clicked_unit_index, self.n_w))
         lastClicked = self.grid.itemAtPosition(last_clicked_position[0], last_clicked_position[1]).widget()
         lastClicked.setStyleSheet(
-            "QWidget { border: %spx solid white; background-color: white }" % str(BORDER_WIDTH / 2))
-
+            "QWidget { background-color: %s }" % self.palette().color(10).name())
         clicked_unit = self.sender()
         clicked_unit.setStyleSheet(
-            "QWidget {  background-color: blue; border: %spx solid blue }" % str(BORDER_WIDTH / 2))
+            "QWidget {  background-color: blue}")
         self.clicked_unit_index = clicked_unit.index
 
     def resizeEvent(self, QResizeEvent):
@@ -169,9 +165,9 @@ class VGG16_Vis_Demo_View(QMainWindow):
         vbox_network.setAlignment(Qt.AlignCenter)
         # todo: change the style of layers
         for layer_name in vgg16_layers_sorted:
-            btn = QRadioButton(layer_name)
-            btn.setFont(QFont('Times', 11, QFont.Bold))
-            vbox_network.addWidget(btn)
+            btn_layer = QRadioButton(layer_name)
+            btn_layer.setFont(QFont('Times', 11, QFont.Bold))
+            vbox_network.addWidget(btn_layer)
             lbl_arrow = QLabel(' ⬇️ ' + (vgg16_layers[layer_name]))
             lbl_arrow.setFont(QFont("Helvetica", 8))
             vbox_network.addWidget(lbl_arrow)
@@ -230,16 +226,137 @@ class VGG16_Vis_Demo_View(QMainWindow):
         vbox2.addWidget(layer_view)
         # endregion
 
+        # region vbox3
+        vbox3 = QVBoxLayout()
+        vbox3.setAlignment(Qt.AlignTop)
+
+        # header
+        combo_unit_view = QComboBox(self)
+        combo_unit_view.addItem('Activations')
+        combo_unit_view.addItem('Deconv')
+        selected_unit_name = '0@conv1_1'
+        lbl_unit_name = QLabel(
+            "of unit <font color='blue'><b>%r</b></font>" % selected_unit_name)  # todo: delete default value
+        hbox_unit_view_header = QHBoxLayout()
+        hbox_unit_view_header.addWidget(combo_unit_view)
+        hbox_unit_view_header.addWidget(lbl_unit_name)
+        vbox3.addLayout(hbox_unit_view_header)
+
+        # region settings of unit view
+
+        # overlay setting
+        hbox_overlay = QHBoxLayout()
+        hbox_overlay.addWidget(QLabel("Overlay: "))
+        combo_unit_overlay = QComboBox(self)
+        combo_unit_overlay.addItem("No Overlay")
+        combo_unit_overlay.addItem("Over active")
+        combo_unit_overlay.addItem("Over inactive")
+        hbox_overlay.addWidget(combo_unit_overlay)
+        vbox3.addLayout(hbox_overlay)
+
+        # Backprop Mode setting
+        hbox_backprop_mode = QHBoxLayout()
+        hbox_backprop_mode.addWidget(QLabel("Backprop mode: "))
+        combo_unit_backprop_mode = QComboBox(self)
+        combo_unit_backprop_mode.addItem("No backprop")
+        combo_unit_backprop_mode.addItem("Gradient")
+        combo_unit_backprop_mode.addItem("ZF deconv")
+        combo_unit_backprop_mode.addItem("Guided backprop")
+        hbox_backprop_mode.addWidget(combo_unit_backprop_mode)
+        vbox3.addLayout(hbox_backprop_mode)
+
+        # Backprop view setting
+        hbox_backprop_view = QHBoxLayout()
+        hbox_backprop_view.addWidget(QLabel("Backprop view: "))
+        combo_unit_backprop_view = QComboBox(self)
+        combo_unit_backprop_view.addItem("Raw")
+        combo_unit_backprop_view.addItem("Gray")
+        combo_unit_backprop_view.addItem("Norm")
+        combo_unit_backprop_view.addItem("Blurred norm")
+        hbox_backprop_view.addWidget(combo_unit_backprop_view)
+        vbox3.addLayout(hbox_backprop_view)
+
+        # endregion
+
+        # unit image
+        pixm_unit = QPixmap(QSize(224, 224))
+        pixm_unit.fill(Qt.darkCyan)
+        lbl_unit_image = QLabel()
+        lbl_unit_image.setPixmap(pixm_unit)
+        lbl_unit_image.setAlignment(Qt.AlignCenter)
+        lbl_unit_image.setMargin(0)
+        lbl_unit_image.setContentsMargins(QMargins(0, 0, 0, 0))
+        lbl_unit_image.setFixedSize(QSize(240, 240))
+        lbl_unit_image.setStyleSheet("QWidget {background-color: blue}")
+        vbox3.addWidget(lbl_unit_image)
+
+        # spacer
+        vbox3.addSpacing(20)
+        frm_line_unit_top9 = QFrame()
+        frm_line_unit_top9.setFrameShape(QFrame.HLine)
+        frm_line_unit_top9.setFrameShadow(QFrame.Sunken)
+        frm_line_unit_top9.setLineWidth(1)
+        vbox3.addWidget(frm_line_unit_top9)
+        vbox3.addSpacing(20)
+
+        # top 9 images
+        vbox3.addWidget(QLabel("Top 9 images with heighest activations"))
+        combo_top9_images_mode = QComboBox(self)
+        combo_top9_images_mode.addItem("Input")
+        combo_top9_images_mode.addItem("Deconv")
+        vbox3.addWidget(combo_top9_images_mode)
+        grid_top9 = QGridLayout()
+        pixm_top_image = QPixmap(QSize(224, 224))
+        pixm_top_image.fill(Qt.darkGray)
+        _top_image_height = 64
+        pixm_top_image_scaled = pixm_top_image.scaledToHeight(_top_image_height)
+        positions_top9_images = [(i, j) for i in range(3) for j in range(3)]
+        for position in positions_top9_images:
+            lbl_top_image = QLabel()
+            lbl_top_image.setPixmap(pixm_top_image_scaled)
+            lbl_top_image.setFixedSize(QSize(_top_image_height + 4, _top_image_height + 4))
+            grid_top9.addWidget(lbl_top_image, *position)
+        vbox3.addLayout(grid_top9)
+
+        # spacer
+        vbox3.addSpacing(20)
+        frm_line_top9_gd = QFrame()
+        frm_line_top9_gd.setFrameShape(QFrame.HLine)
+        frm_line_top9_gd.setFrameShadow(QFrame.Sunken)
+        frm_line_top9_gd.setLineWidth(1)
+        vbox3.addWidget(frm_line_top9_gd)
+        vbox3.addSpacing(20)
+
+        # gradient ascent
+        btn_gradient_ascent = QPushButton("Find out what was learnt in this unit")
+        vbox3.addWidget(btn_gradient_ascent)
+
+        # endregion
+
         hbox = QHBoxLayout()
-        widget_vbox1 = QWidget()
+        widget_vbox1 = QFrame()
         widget_vbox1.setLayout(vbox1)
         widget_vbox1.setFixedWidth(widget_vbox1.sizeHint().width())
+        widget_vbox2 = QFrame()
+        widget_vbox2.setLayout(vbox2)
+        widget_vbox3 = QFrame()
+        widget_vbox3.setLayout(vbox3)
+        widget_vbox3.setFixedWidth(widget_vbox3.sizeHint().width())
+
+        frm_line_1_2 = QFrame()
+        frm_line_1_2.setFrameShape(QFrame.VLine)
+        frm_line_1_2.setFrameShadow(QFrame.Sunken)
+        frm_line_1_2.setLineWidth(2)
+        frm_line_2_3 = QFrame()
+        frm_line_2_3.setFrameShape(QFrame.VLine)
+        frm_line_2_3.setFrameShadow(QFrame.Sunken)
+        frm_line_2_3.setLineWidth(2)
+
         hbox.addWidget(widget_vbox1)
-        hbox.addLayout(vbox2)
-
-        splitter1 = QSplitter(Qt.Horizontal)
-
-        splitter2 = QSplitter(Qt.Vertical)
+        hbox.addWidget(frm_line_1_2)
+        hbox.addWidget(widget_vbox2)
+        hbox.addWidget(frm_line_2_3)
+        hbox.addWidget(widget_vbox3)
 
         central_widget = QWidget()
         central_widget.setLayout(hbox)
