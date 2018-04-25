@@ -8,19 +8,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QObject, QBasicTimer, QSize, QMargins
 import numpy as np
 import itertools
 
-# todo: change to read from model
-vgg16_layers = {'input': '224×224×3', 'conv1_1': '224×224×64', 'conv1_2': '224×224×64', 'pool1': '112×112×64',
-                'conv2_1': '112×112×128', 'conv2_2': '112×112×128', 'pool2': '56×56×128', 'conv3_1': '56×56×256',
-                'conv_3_2': '56×56×256', 'conv_3_3': '56×56×256', 'pool3': '28×28×256', 'conv4_1': '28×28×512',
-                'conv4_2': '28×28×512', 'conv4_3': '28×28×512', 'pool4': '14×14×512', 'conv5_1': '14×14×512',
-                'conv5_2': '14×14×512', 'conv5_3': '14×14×512', 'pool5': '7×7×512', 'fc6': '4096',
-                'fc7': '4096', 'fc8': '16'}
-vgg16_layers_sorted = ['input', 'conv1_1', 'conv1_2', 'pool1',
-                       'conv2_1', 'conv2_2', 'pool2', 'conv3_1',
-                       'conv_3_2', 'conv_3_3', 'pool3', 'conv4_1',
-                       'conv4_2', 'conv4_3', 'pool4', 'conv5_1',
-                       'conv5_2', 'conv5_3', 'pool5', 'fc6',
-                       'fc7', 'fc8']
+from VGG16_Vis_Demo_Model import VGG16_Vis_Demo_Model
 
 BORDER_WIDTH = 10
 
@@ -122,36 +110,53 @@ class LayerViewWidget(QScrollArea):
 
 class VGG16_Vis_Demo_View(QMainWindow):
 
-    def __init__(self):
+    def __init__(self, model, ctl):
         super(QMainWindow, self).__init__()
+        self.model = model
+        self.ctl = ctl
+        self.model.dataChanged[int].connect(self.update_data)
         self.initUI()
+
 
     def initUI(self):
         # region vbox1
         vbox1 = QVBoxLayout()
         vbox1.setAlignment(Qt.AlignCenter)
 
-        # input image
+        # model selection & input image
         grid_input = QGridLayout()
         font_bold = QFont()
         font_bold.setBold(True)
-        lbl_input = QLabel('Input', self)
+        lbl_model = QLabel('Model')
+        lbl_model.setFont(font_bold)
+        combo_model = QComboBox(self)
+        combo_model.addItem('')
+        model_names = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_model_names)
+        for model_name in model_names:
+            combo_model.addItem(model_name)
+        combo_model.activated[str].connect(self.ctl.set_model)
+        lbl_input = QLabel('Input')
         lbl_input.setFont(font_bold)
         combo_input_source = QComboBox(self)
+        combo_input_source.addItem('')  # null entry
         combo_input_source.addItem('Image')
         combo_input_source.addItem('Video')
-        combo_input_image = QComboBox(self)
-        grid_input.addWidget(lbl_input, 0, 1)
-        grid_input.addWidget(combo_input_source, 0, 2)
-        grid_input.addWidget(combo_input_image, 1, 1, 1, 2)
+        self.combo_input_image = QComboBox(self)
+        self.combo_input_image.addItem('')  # null entry
+        self.combo_input_image.activated[str].connect(self.ctl.set_input_image)
+        grid_input.addWidget(lbl_model, 0, 1)
+        grid_input.addWidget(combo_model, 0 ,2)
+        grid_input.addWidget(lbl_input, 1, 1)
+        grid_input.addWidget(combo_input_source, 1, 2)
+        grid_input.addWidget(self.combo_input_image, 2, 1, 1, 2)
         vbox1.addLayout(grid_input)
 
         pixm_input = QPixmap(QSize(224, 224))
         pixm_input.fill(Qt.black)
-        lbl_input_image = QLabel(self)
-        lbl_input_image.setAlignment(Qt.AlignCenter)
-        lbl_input_image.setPixmap(pixm_input)
-        vbox1.addWidget(lbl_input_image)
+        self.lbl_input_image = QLabel(self)
+        self.lbl_input_image.setAlignment(Qt.AlignCenter)
+        self.lbl_input_image.setPixmap(pixm_input)
+        vbox1.addWidget(self.lbl_input_image)
 
         # Arrow
         lbl_arrow_input_to_vgg16 = QLabel('⬇️')
@@ -163,12 +168,20 @@ class VGG16_Vis_Demo_View(QMainWindow):
         gb_network = QGroupBox("VGG16")
         vbox_network = QVBoxLayout()
         vbox_network.setAlignment(Qt.AlignCenter)
+        vgg16_layer_names = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_layer_names)
+        vgg16_layer_output_sizes = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_layer_output_sizes)
         # todo: change the style of layers
-        for layer_name in vgg16_layers_sorted:
+        for layer_name in vgg16_layer_names:
             btn_layer = QRadioButton(layer_name)
             btn_layer.setFont(QFont('Times', 11, QFont.Bold))
             vbox_network.addWidget(btn_layer)
-            lbl_arrow = QLabel(' ⬇️ ' + (vgg16_layers[layer_name]))
+            size = vgg16_layer_output_sizes[layer_name]
+            size_string = ''
+            for value in size:
+                size_string += str(value)
+                size_string += '×'
+            size_string = size_string[:len(size_string)-len('×')]
+            lbl_arrow = QLabel(' ⬇️ ' + size_string)
             lbl_arrow.setFont(QFont("Helvetica", 8))
             vbox_network.addWidget(lbl_arrow)
         wrapper_vbox_network = QWidget()
@@ -360,6 +373,10 @@ class VGG16_Vis_Demo_View(QMainWindow):
 
         central_widget = QWidget()
         central_widget.setLayout(hbox)
+
+        statusbar = self.statusBar()
+        statusbar.showMessage('ready')
+        self.ctl.statusbar = statusbar
         self.setCentralWidget(central_widget)
         self.setWindowTitle('VGG16 Visualizer')
         self.center()
@@ -370,3 +387,20 @@ class VGG16_Vis_Demo_View(QMainWindow):
         cp = QDesktopWidget().availableGeometry().center()
         qr.moveCenter(cp)
         self.move(qr.topLeft())
+
+    def update_data(self, data_idx):
+        if data_idx == VGG16_Vis_Demo_Model.data_idx_input_image_names:
+            self.update_combobox_input_image()
+        elif data_idx == VGG16_Vis_Demo_Model.data_idx_input_image:
+            image = self.model.get_data(data_idx)
+            self.lbl_input_image.setPixmap(image)
+
+    def update_combobox_input_image(self):
+        self.combo_input_image.clear()
+        self.combo_input_image.addItem('')  # null entry
+        input_image_names = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_input_image_names)
+        for name in input_image_names:
+            self.combo_input_image.addItem(name)
+
+
+
