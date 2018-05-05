@@ -7,6 +7,7 @@ from PyQt5.QtGui import QFont, QIcon, QColor, QPainter, QPen, QPixmap, QImage
 from PyQt5.QtCore import Qt, pyqtSignal, QObject, QBasicTimer, QSize, QMargins
 import numpy as np
 import itertools
+import matplotlib.pyplot as plt
 
 from VGG16_Vis_Demo_Model import VGG16_Vis_Demo_Model
 
@@ -80,6 +81,8 @@ class LayerViewWidget(QScrollArea):
             unitView.setPixmap(scaled_image)
             unitView.setFixedSize(QSize(d, d))
             self.grid.addWidget(unitView, *position)
+        if self.clicked_unit_index >= N:
+            self.clicked_unit_index = 0
         last_clicked_position = (self.clicked_unit_index // self.n_w, np.remainder(self.clicked_unit_index, self.n_w))
         lastClicked = self.grid.itemAtPosition(last_clicked_position[0], last_clicked_position[1]).widget()
         lastClicked.clicked.emit()
@@ -88,24 +91,49 @@ class LayerViewWidget(QScrollArea):
         # deactivate last one
         last_clicked_position = (self.clicked_unit_index // self.n_w, np.remainder(self.clicked_unit_index, self.n_w))
         lastClicked = self.grid.itemAtPosition(last_clicked_position[0], last_clicked_position[1]).widget()
-        lastClicked.setStyleSheet(
-            "QWidget { background-color: %s }" % self.palette().color(10).name())
+        lastClicked.setStyleSheet("QWidget { background-color: %s }" % self.palette().color(10).name())
+        # activate the clicked one
         clicked_unit = self.sender()
-        clicked_unit.setStyleSheet(
-            "QWidget {  background-color: blue}")
+        clicked_unit.setStyleSheet("QWidget {  background-color: blue}")
         self.clicked_unit_index = clicked_unit.index
 
     def resizeEvent(self, QResizeEvent):
+        self.rearrange()
+
+    def rearrange(self):
         self.clear_grid()
         self.allocate_units(self.units)
-        self.show()
-        pass
+
+    def set_units(self, units):
+        self.units = units
+        self.rearrange()
+        self.clicked_unit_index = 0
 
     def clear_grid(self):
         while self.grid.count():
             self.grid.itemAt(0).widget().deleteLater()
             self.grid.itemAt(0).widget().close()
             self.grid.removeItem(self.grid.itemAt(0))
+
+
+class ProbsView(QGroupBox):
+    def __init__(self):
+        super(QGroupBox, self).__init__()
+        self.setTitle("Results")
+        vbox_probs = QVBoxLayout()
+        self.lbl_probs = QLabel('#1 \n#2 \n#3 \n#4 \n#5 ')
+        vbox_probs.addWidget(self.lbl_probs)
+        self.setLayout(vbox_probs)
+
+    def set_probs(self, probs, labels):
+        num = min(5, len(probs))
+        sorted_results_idx = sorted(range(len(probs)), reverse=True, key=lambda k: probs[k])
+        txt = ''
+        for i in range(num):
+            if i != 0:
+                txt += '\n'
+            txt += '#%d %+16s    %4.3e' % (i, labels[sorted_results_idx[i]], probs[sorted_results_idx[i]])
+        self.lbl_probs.setText(txt)
 
 
 class VGG16_Vis_Demo_View(QMainWindow):
@@ -116,7 +144,6 @@ class VGG16_Vis_Demo_View(QMainWindow):
         self.ctl = ctl
         self.model.dataChanged[int].connect(self.update_data)
         self.initUI()
-
 
     def initUI(self):
         # region vbox1
@@ -174,6 +201,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
         for layer_name in vgg16_layer_names:
             btn_layer = QRadioButton(layer_name)
             btn_layer.setFont(QFont('Times', 11, QFont.Bold))
+            btn_layer.toggled.connect(self.select_layer_action)
             vbox_network.addWidget(btn_layer)
             size = vgg16_layer_output_sizes[layer_name]
             size_string = ''
@@ -203,12 +231,8 @@ class VGG16_Vis_Demo_View(QMainWindow):
         vbox1.addWidget(lbl_arrow_vgg16_to_probs)
 
         # Prob view
-        gb_probs = QGroupBox("Results")
-        vbox_probs = QVBoxLayout()
-        lbl_probs = QLabel('#1 \n#2 \n#3 \n#4 \n#5 ')
-        vbox_probs.addWidget(lbl_probs)
-        gb_probs.setLayout(vbox_probs)
-        vbox1.addWidget(gb_probs)
+        self.probs_view = ProbsView()
+        vbox1.addWidget(self.probs_view)
         # endregion
 
         # region vbox2
@@ -235,8 +259,8 @@ class VGG16_Vis_Demo_View(QMainWindow):
             dummy_pxim_unit = QPixmap(QSize(112, 112))
             dummy_pxim_unit.fill(Qt.darkGreen)
             dummy_units.append(dummy_pxim_unit)
-        layer_view = LayerViewWidget(dummy_units)
-        vbox2.addWidget(layer_view)
+        self.layer_view = LayerViewWidget(dummy_units)
+        vbox2.addWidget(self.layer_view)
         # endregion
 
         # region vbox3
@@ -294,14 +318,14 @@ class VGG16_Vis_Demo_View(QMainWindow):
         # unit image
         pixm_unit = QPixmap(QSize(224, 224))
         pixm_unit.fill(Qt.darkCyan)
-        lbl_unit_image = QLabel()
-        lbl_unit_image.setPixmap(pixm_unit)
-        lbl_unit_image.setAlignment(Qt.AlignCenter)
-        lbl_unit_image.setMargin(0)
-        lbl_unit_image.setContentsMargins(QMargins(0, 0, 0, 0))
-        lbl_unit_image.setFixedSize(QSize(240, 240))
-        lbl_unit_image.setStyleSheet("QWidget {background-color: blue}")
-        vbox3.addWidget(lbl_unit_image)
+        self.lbl_unit_image = QLabel()
+        self.lbl_unit_image.setPixmap(pixm_unit)
+        self.lbl_unit_image.setAlignment(Qt.AlignCenter)
+        self.lbl_unit_image.setMargin(0)
+        self.lbl_unit_image.setContentsMargins(QMargins(0, 0, 0, 0))
+        self.lbl_unit_image.setFixedSize(QSize(240, 240))
+        self.lbl_unit_image.setStyleSheet("QWidget {background-color: blue}")
+        vbox3.addWidget(self.lbl_unit_image)
 
         # spacer
         vbox3.addSpacing(20)
@@ -376,7 +400,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
 
         statusbar = self.statusBar()
         statusbar.showMessage('ready')
-        self.ctl.statusbar = statusbar
+        self.ctl.set_statusbar_instance(statusbar)
         self.setCentralWidget(central_widget)
         self.setWindowTitle('VGG16 Visualizer')
         self.center()
@@ -394,6 +418,10 @@ class VGG16_Vis_Demo_View(QMainWindow):
         elif data_idx == VGG16_Vis_Demo_Model.data_idx_input_image:
             image = self.model.get_data(data_idx)
             self.lbl_input_image.setPixmap(image)
+        elif data_idx == VGG16_Vis_Demo_Model.data_idx_probs:
+            results = self.model.get_data(data_idx)
+            labels = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_labels)
+            self.probs_view.set_probs(results, labels)
 
     def update_combobox_input_image(self):
         self.combo_input_image.clear()
@@ -402,5 +430,30 @@ class VGG16_Vis_Demo_View(QMainWindow):
         for name in input_image_names:
             self.combo_input_image.addItem(name)
 
+    def select_layer_action(self):
+        self.statusBar().showMessage('busy')
+        btn = self.sender()
+        if btn.isChecked():
+            layer_name = btn.text()
+            vgg16_layer_output_sizes = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_layer_output_sizes)
+            size = vgg16_layer_output_sizes[layer_name]
+            num = size[len(size)-1]
+            units = []
+            try:
+                data = self.model.get_activations(layer_name)
+                data = (data - data.min()) / (data.max() - data.min()) * 255  # normalize data for display
+                data = data.astype(np.uint8)
+                for i in range(num):
+                    if len(size) < 3:
+                        unit = QPixmap(QSize(8 ,8))
+                        unit.fill(QColor(data[i], data[i], data[i]))
+                    else:
+                        unit = QImage(data[i][:], data[i].shape[1], data[i].shape[0], data[i].shape[0], QImage.Format_Grayscale8)
+                        unit = QPixmap.fromImage(unit)
+                    units.append(unit)
+                self.layer_view.set_units(units)
+            except AttributeError, Argument:
+                pass
+        self.statusBar().showMessage('ready')
 
 
