@@ -7,6 +7,8 @@ from PyQt5.QtGui import QFont, QIcon, QColor, QPainter, QPen, QPixmap, QImage
 from PyQt5.QtCore import Qt, pyqtSignal, QObject, QBasicTimer, QSize, QMargins
 import numpy as np
 import itertools
+import os
+from PIL import Image
 import matplotlib.pyplot as plt
 
 from VGG16_Vis_Demo_Model import VGG16_Vis_Demo_Model
@@ -32,6 +34,10 @@ class BigUnitViewWidget(QLabel):
         scaled_pixmap = pixmap.scaledToWidth(self.IMAGE_SIZE.width())
         self.setPixmap(scaled_pixmap)
 
+    def mouseDoubleClickEvent(self, QMouseEvent):
+        self.pixmap().save('./Temps/ForExternalProgram.png')
+        Image.open("./Temps/ForExternalProgram.png").show()
+
 # clickable QLabel in Layer View
 class SmallUnitViewWidget(QLabel):
     clicked = pyqtSignal()
@@ -45,6 +51,15 @@ class SmallUnitViewWidget(QLabel):
 
     def mousePressEvent(self, QMouseEvent):
         self.clicked.emit()
+
+# double-clickable QLabel
+class DoubleClickableQLabel(QLabel):
+    def __init__(self):
+        super(QLabel, self).__init__()
+
+    def mouseDoubleClickEvent(self, QMouseEvent):
+        self.pixmap().save('./Temps/ForExternalProgram.png')
+        Image.open("./Temps/ForExternalProgram.png").show()
 
 
 class LayerViewWidget(QScrollArea):
@@ -201,7 +216,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
 
         pixm_input = QPixmap(QSize(224, 224))
         pixm_input.fill(Qt.black)
-        self.lbl_input_image = QLabel(self)
+        self.lbl_input_image = DoubleClickableQLabel()
         self.lbl_input_image.setAlignment(Qt.AlignCenter)
         self.lbl_input_image.setPixmap(pixm_input)
         vbox1.addWidget(self.lbl_input_image)
