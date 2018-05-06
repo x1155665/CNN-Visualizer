@@ -43,6 +43,7 @@ class VGG16_Vis_Demo_Model(QObject):
     data_idx_input_image_names = 5
     data_idx_input_image = 6
     data_idx_labels = 7
+    data_idx_new_input = 128
 
     def __init__(self):
         super(QObject, self).__init__()
@@ -60,8 +61,8 @@ class VGG16_Vis_Demo_Model(QObject):
         self._labels = np.loadtxt(label_files[model_name], str, delimiter='\n')
         self._net = caffe.Net(self._model_def, self._model_weights, caffe.TEST)
         self._input_image_names = [icon_name for icon_name in os.listdir(input_image_paths[self._model_name]) if
-                                  ".png" in icon_name]
-        self.dataChanged.emit(5)
+                                   ".png" in icon_name]
+        self.dataChanged.emit(self.data_idx_input_image_names)
         self._transformer = caffe.io.Transformer({'data': self._net.blobs['data'].data.shape})
         self._transformer.set_transpose('data', (2, 0, 1))  # move image channels to outermost dimension
         self._transformer.set_mean('data', mean)  # subtract the dataset-mean value in each channel
@@ -74,10 +75,9 @@ class VGG16_Vis_Demo_Model(QObject):
             image = caffe.io.resize(image, [224, 224], mode='constant', cval=0)
             transformed_image = self._transformer.preprocess('data', image)
             self._net.blobs['data'].data[...] = transformed_image
-            self.dataChanged.emit(self.data_idx_input_image)
             self._net.forward()
             self.online = True
-            self.dataChanged.emit(self.data_idx_probs)
+            self.dataChanged.emit(self.data_idx_new_input)
 
     def get_data(self, data_idx):
         if data_idx == self.data_idx_model_names:
@@ -100,8 +100,15 @@ class VGG16_Vis_Demo_Model(QObject):
             activations = self._net.blobs[layer_name].data[0]
             return activations
 
+    def get_activation(self, layer_name, unit_index):
+        if self.online and vgg16_layer_names.__contains__(layer_name) and unit_index < \
+                vgg16_layer_output_sizes[layer_name][len(vgg16_layer_output_sizes[layer_name]) - 1]:
+            activation = self._net.blobs[layer_name].data[0][unit_index]
+            return activation
+
     def _get_sorted_probs(self):
         results = self._net.blobs['prob'].data.flatten()
         sorted_results_idx = sorted(range(len(results)), reverse=True, key=lambda k: results[k])
-        evaluation = [{self._labels[sorted_results_idx[k]]: results[sorted_results_idx[k]]} for k in range(len(results))]
+        evaluation = [{self._labels[sorted_results_idx[k]]: results[sorted_results_idx[k]]} for k in
+                      range(len(results))]
         return evaluation

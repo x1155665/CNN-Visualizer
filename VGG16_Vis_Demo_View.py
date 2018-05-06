@@ -13,9 +13,27 @@ from VGG16_Vis_Demo_Model import VGG16_Vis_Demo_Model
 
 BORDER_WIDTH = 10
 
+# detailed unit view
+class BigUnitViewWidget(QLabel):
+    IMAGE_SIZE = QSize(224,224)
 
-# clickable QLabel
-class UnitViewWidget(QLabel):
+    def __init__(self):
+        super(QLabel, self).__init__()
+        default_image = QPixmap(self.IMAGE_SIZE)
+        default_image.fill(Qt.darkGreen)
+        self.setPixmap(default_image)
+        self.setAlignment(Qt.AlignCenter)
+        self.setMargin(0)
+        self.setContentsMargins(QMargins(0, 0, 0, 0))
+        self.setFixedSize(QSize(240, 240))
+        self.setStyleSheet("QWidget {background-color: blue}")
+
+    def scale_and_set_pixmap(self, pixmap):
+        scaled_pixmap = pixmap.scaledToWidth(self.IMAGE_SIZE.width())
+        self.setPixmap(scaled_pixmap)
+
+# clickable QLabel in Layer View
+class SmallUnitViewWidget(QLabel):
     clicked = pyqtSignal()
 
     def __init__(self):
@@ -36,6 +54,8 @@ class LayerViewWidget(QScrollArea):
 
     n_w = 1  # number of units per row
     n_h = 1  # number of units per column
+
+    clicked_unit_changed = pyqtSignal(int)
 
     def __init__(self, units):
         super(QScrollArea, self).__init__()
@@ -74,7 +94,7 @@ class LayerViewWidget(QScrollArea):
 
         positions = [(i, j) for i in range(int(self.n_h)) for j in range(int(self.n_w))]
         for position, unit in itertools.izip(positions, units):
-            unitView = UnitViewWidget()
+            unitView = SmallUnitViewWidget()
             unitView.clicked.connect(self.unit_clicked_action)
             unitView.index = position[0] * self.n_w + position[1]
             scaled_image = unit.scaledToWidth(displayed_unit_width)
@@ -95,6 +115,7 @@ class LayerViewWidget(QScrollArea):
         # activate the clicked one
         clicked_unit = self.sender()
         clicked_unit.setStyleSheet("QWidget {  background-color: blue}")
+        self.clicked_unit_changed.emit(clicked_unit.index)  # notify the main view to change the unit view
         self.clicked_unit_index = clicked_unit.index
 
     def resizeEvent(self, QResizeEvent):
@@ -107,7 +128,7 @@ class LayerViewWidget(QScrollArea):
     def set_units(self, units):
         self.units = units
         self.rearrange()
-        self.clicked_unit_index = 0
+
 
     def clear_grid(self):
         while self.grid.count():
@@ -260,6 +281,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
             dummy_pxim_unit.fill(Qt.darkGreen)
             dummy_units.append(dummy_pxim_unit)
         self.layer_view = LayerViewWidget(dummy_units)
+        self.layer_view.clicked_unit_changed.connect(self.select_unit_action)
         vbox2.addWidget(self.layer_view)
         # endregion
 
@@ -316,16 +338,8 @@ class VGG16_Vis_Demo_View(QMainWindow):
         # endregion
 
         # unit image
-        pixm_unit = QPixmap(QSize(224, 224))
-        pixm_unit.fill(Qt.darkCyan)
-        self.lbl_unit_image = QLabel()
-        self.lbl_unit_image.setPixmap(pixm_unit)
-        self.lbl_unit_image.setAlignment(Qt.AlignCenter)
-        self.lbl_unit_image.setMargin(0)
-        self.lbl_unit_image.setContentsMargins(QMargins(0, 0, 0, 0))
-        self.lbl_unit_image.setFixedSize(QSize(240, 240))
-        self.lbl_unit_image.setStyleSheet("QWidget {background-color: blue}")
-        vbox3.addWidget(self.lbl_unit_image)
+        self.big_unit_view = BigUnitViewWidget()
+        vbox3.addWidget(self.big_unit_view)
 
         # spacer
         vbox3.addSpacing(20)
@@ -415,13 +429,8 @@ class VGG16_Vis_Demo_View(QMainWindow):
     def update_data(self, data_idx):
         if data_idx == VGG16_Vis_Demo_Model.data_idx_input_image_names:
             self.update_combobox_input_image()
-        elif data_idx == VGG16_Vis_Demo_Model.data_idx_input_image:
-            image = self.model.get_data(data_idx)
-            self.lbl_input_image.setPixmap(image)
-        elif data_idx == VGG16_Vis_Demo_Model.data_idx_probs:
-            results = self.model.get_data(data_idx)
-            labels = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_labels)
-            self.probs_view.set_probs(results, labels)
+        elif data_idx == VGG16_Vis_Demo_Model.data_idx_new_input:
+            self.refresh()
 
     def update_combobox_input_image(self):
         self.combo_input_image.clear()
@@ -431,29 +440,61 @@ class VGG16_Vis_Demo_View(QMainWindow):
             self.combo_input_image.addItem(name)
 
     def select_layer_action(self):
-        self.statusBar().showMessage('busy')
         btn = self.sender()
         if btn.isChecked():
-            layer_name = btn.text()
-            vgg16_layer_output_sizes = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_layer_output_sizes)
-            size = vgg16_layer_output_sizes[layer_name]
-            num = size[len(size)-1]
-            units = []
+            self.selected_layer_name = btn.text()
+            self.load_layer_view()
+
+    def load_layer_view(self):
+        if hasattr(self, 'selected_layer_name'):
+            self.statusBar().showMessage('busy')
             try:
-                data = self.model.get_activations(layer_name)
-                data = (data - data.min()) / (data.max() - data.min()) * 255  # normalize data for display
-                data = data.astype(np.uint8)
-                for i in range(num):
-                    if len(size) < 3:
-                        unit = QPixmap(QSize(8 ,8))
-                        unit.fill(QColor(data[i], data[i], data[i]))
-                    else:
-                        unit = QImage(data[i][:], data[i].shape[1], data[i].shape[0], data[i].shape[0], QImage.Format_Grayscale8)
-                        unit = QPixmap.fromImage(unit)
-                    units.append(unit)
-                self.layer_view.set_units(units)
+                data = self.model.get_activations(self.selected_layer_name)
+                data = self._prepare_data_for_display(data)
+                pximaps = self._get_pixmaps_from_data(data)
+                self.layer_view.set_units(pximaps)
             except AttributeError, Argument:
                 pass
-        self.statusBar().showMessage('ready')
+            self.statusBar().showMessage('ready')
+
+
+    def select_unit_action(self, unit_index):
+        if hasattr(self, 'selected_layer_name'):
+            data = self.model.get_activations(self.selected_layer_name)
+            data = self._prepare_data_for_display(data)
+            pixmap = self._get_pixmaps_from_data(np.array([data[unit_index],]))[0]
+            self.big_unit_view.scale_and_set_pixmap(pixmap)
+
+    def _prepare_data_for_display(self, data):
+        data = (data - data.min()) / (data.max() - data.min()) * 255  # normalize data for display
+        data = data.astype(np.uint8)  # convert to 8-bit unsigned integer
+        return data
+
+    # argument 'data' is a 3D (conv_layer) or 2D (fc_layer) array. The first axis is the unit index
+    def _get_pixmaps_from_data(self, data):
+        pixmaps = []
+        num = data.shape[0]
+        for i in range(num):
+            if len(data[i].shape) < 2:
+                unit = QPixmap(QSize(8, 8))
+                unit.fill(QColor(data[i], data[i], data[i]))
+            else:
+                unit = QImage(data[i][:], data[i].shape[1], data[i].shape[0], data[i].shape[0],
+                              QImage.Format_Grayscale8)
+                unit = QPixmap.fromImage(unit)
+            pixmaps.append(unit)
+        return pixmaps
+
+    def refresh(self):
+        # get input image
+        self.lbl_input_image.setPixmap(self.model.get_data(VGG16_Vis_Demo_Model.data_idx_input_image))
+
+        # get probs
+        results = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_probs)
+        labels = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_labels)
+        self.probs_view.set_probs(results, labels)
+
+        # load layer view
+        self.load_layer_view()
 
 
