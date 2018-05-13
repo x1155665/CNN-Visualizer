@@ -41,9 +41,10 @@ class VGG16_Vis_Demo_Model(QObject):
     data_idx_layer_activation = 3
     data_idx_probs = 4
     data_idx_input_image_names = 5
-    data_idx_input_image = 6
+    data_idx_input_image = 6  # to be removed
     data_idx_labels = 7
     data_idx_new_input = 128
+    data_idx_input_image_path = 8
 
     def __init__(self):
         super(QObject, self).__init__()
@@ -59,7 +60,7 @@ class VGG16_Vis_Demo_Model(QObject):
         self._model_def = prototxts[model_name]
         self._model_weights = weights_file[model_name]
         self._labels = np.loadtxt(label_files[model_name], str, delimiter='\n')
-        self._net = caffe.Net(self._model_def, self._model_weights, caffe.TEST)
+        self._net = caffe.Classifier(self._model_def, self._model_weights)
         self._input_image_names = [icon_name for icon_name in os.listdir(input_image_paths[self._model_name]) if
                                    ".png" in icon_name]
         self.dataChanged.emit(self.data_idx_input_image_names)
@@ -90,10 +91,10 @@ class VGG16_Vis_Demo_Model(QObject):
             return self._net.blobs['prob'].data.flatten()
         elif data_idx == self.data_idx_input_image_names:
             return self._input_image_names
-        elif data_idx == self.data_idx_input_image:
-            return QPixmap(self.input_image_path)
         elif data_idx == self.data_idx_labels:
             return self._labels
+        elif data_idx == self.data_idx_input_image_path:
+            return self.input_image_path
 
     def get_activations(self, layer_name):
         if self.online and vgg16_layer_names.__contains__(layer_name):
@@ -105,6 +106,24 @@ class VGG16_Vis_Demo_Model(QObject):
                 vgg16_layer_output_sizes[layer_name][len(vgg16_layer_output_sizes[layer_name]) - 1]:
             activation = self._net.blobs[layer_name].data[0][unit_index]
             return activation
+
+    def get_deconv(self, layer_name, unit_index, backprop_mode):
+        diffs = self._net.blobs[layer_name].diff[0]
+        diffs = diffs * 0
+        data = self._net.blobs[layer_name].data[0]
+        diffs[unit_index] = data[unit_index]
+        diffs = np.expand_dims(diffs, 0)  # add batch dimension
+        layer_name = str(layer_name)
+
+        if backprop_mode == 'Gradient':
+            result = self._net.backward_from_layer(layer_name, diffs, zero_higher=True)
+        elif backprop_mode == 'ZF deconv':
+            result = self._net.deconv_from_layer(layer_name, diffs, zero_higher=True, deconv_type='Zeiler & Fergus')
+        elif backprop_mode == 'Guided backprop':
+            result = self._net.deconv_from_layer(layer_name, diffs, zero_higher=True, deconv_type='Guided Backprop')
+        else:
+            result = None
+        return result
 
     def _get_sorted_probs(self):
         results = self._net.blobs['prob'].data.flatten()
