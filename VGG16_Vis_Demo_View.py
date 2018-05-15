@@ -11,15 +11,43 @@ import os
 from PIL import Image
 import matplotlib.pyplot as plt
 import cv2
+from enum import Enum
 
 from VGG16_Vis_Demo_Model import VGG16_Vis_Demo_Model
 
 BORDER_WIDTH = 10
 
 
+# from DeepVis tool
+def norm01(arr):
+    arr = arr.copy()
+    arr -= arr.min()
+    arr /= arr.max() + 1e-10
+    return arr
+
+
+# modified from DeepVis tool
+def norm0255c(arr, center):
+    # Maps the input range to [0,1] such that the center value maps to .5
+    arr = arr.copy()
+    arr -= center
+    arr /= max(2 * arr.max(), -2 * arr.min()) + 1e-10
+    arr += .5
+    arr *= 255
+    assert arr.min() >= 0
+    assert arr.max() <= 255
+    return arr
+
+
 # detailed unit view
 class BigUnitViewWidget(QLabel):
     IMAGE_SIZE = QSize(224, 224)
+
+    class BackpropViewOption(Enum):
+        RAW = 'raw'
+        GRAY = 'gray'
+        NORM = 'norm'
+        NORM_BLUR = 'blurred norm'
 
     def __init__(self):
         super(QLabel, self).__init__()
@@ -31,25 +59,62 @@ class BigUnitViewWidget(QLabel):
         self.setContentsMargins(QMargins(0, 0, 0, 0))
         self.setFixedSize(QSize(240, 240))
         self.setStyleSheet("QWidget {background-color: blue}")
-        self.mode = 'No overlay'
+        self.overlay_mode = 'No overlay'
+        self.working_mode = 'Activation'
+        self.backprop_view_mode = 'raw'
 
-    def scale_and_set_pixmap(self, data, input_image_path):
-        self.data = data
+    def display_activation(self, data, input_image_path):
+        self.working_mode = 'Activation'
+        self.activation = data
         self.input_image_path = input_image_path
-        self.setOverlay(self.mode)
+        self.set_overlay_view(self.overlay_mode)
+
+    def display_deconv(self, data):
+        self.working_mode = 'Deconv'
+        self.deconv = data
+        self.set_backprop_view(self.backprop_view_mode)
 
     def mouseDoubleClickEvent(self, QMouseEvent):
         self.pixmap().save('./Temps/ForExternalProgram.png')
         Image.open("./Temps/ForExternalProgram.png").show()
 
-    def setOverlay(self, mode='No overlay'):
-        if not hasattr(self, 'data'):
+    def set_backprop_view(self, view_mode=BackpropViewOption.RAW.value):
+        self.backprop_view_mode = view_mode
+        if hasattr(self, 'deconv') == False or self.working_mode != 'Deconv':
             return
-        self.mode = mode
+
+        data = self.deconv
+        data = cv2.resize(data, (self.IMAGE_SIZE.width(), self.IMAGE_SIZE.height()))
+        if view_mode == self.BackpropViewOption.RAW.value:
+            data = norm0255c(data, 0)
+        elif view_mode == self.BackpropViewOption.GRAY.value:
+            data = norm0255c(data.mean(axis=2), 0)
+            data = np.dstack([data]*3)  # 244x224 => 224x224x3 (RGB!)
+        elif view_mode == self.BackpropViewOption.NORM.value or view_mode == self.BackpropViewOption.NORM_BLUR.value:
+            data = np.linalg.norm(data, axis=2)
+            if view_mode == self.BackpropViewOption.NORM_BLUR.value:
+                grad_norm_blur_radius = 0.02 * max([self.IMAGE_SIZE.width(), self.IMAGE_SIZE.height()])
+                cv2.GaussianBlur(data, (0, 0), grad_norm_blur_radius, data)
+            data = norm01(data)
+            data = norm01(data)
+            cmap = plt.get_cmap('jet')
+            rgba_image = cmap(data)
+            data = np.delete(rgba_image, 3, 2)
+            data *= 255
+
+        data = data.astype(np.uint8)
+        image = QImage(data.tobytes(), data.shape[0], data.shape[1], data.shape[1] * 3, QImage.Format_RGB888)
+        pixmap = QPixmap.fromImage(image)
+        self.setPixmap(pixmap)
+
+    def set_overlay_view(self, mode='No overlay'):
+        self.overlay_mode = mode
+        if hasattr(self, 'activation') == False or self.working_mode != 'Activation':
+            return
 
         # prepare base image
         if mode == 'No overlay' or mode == 'Over active' or mode == 'Over inactive':
-            pixmap = VGG16_Vis_Demo_View.get_pixmaps_from_data(np.array([self.data, ]))[0]
+            pixmap = VGG16_Vis_Demo_View.get_pixmaps_from_data(np.array([self.activation, ]))[0]
             pixmap = pixmap.scaledToWidth(self.IMAGE_SIZE.width())
         else:
             pixmap = QPixmap(self.IMAGE_SIZE)
@@ -57,20 +122,20 @@ class BigUnitViewWidget(QLabel):
 
         # Overlay
         if not mode == 'No overlay':
-            data = self.data
+            data = self.activation
 
             # use sigmoid function to add non-linearity near border
             border = 32
             delta = 6.3  # delta=(255-border)/stretch_factor=(0-border)/stretch_factor
             data = data.astype(np.float32)
             stretch_factor = border / delta + (255 - 2 * border) / delta / 255 * data  # linear function
-            data_norm = np.divide(data-border, stretch_factor)
+            data_norm = np.divide(data - border, stretch_factor)
             alpha = 255 / (1 + np.exp(-data_norm))
 
             if mode == 'Over inactive' or mode == 'Only inactive':
                 alpha = 255 - alpha
 
-            if len(self.data.shape) > 1:
+            if len(self.activation.shape) > 1:
                 alpha_channel = alpha
                 alpha_channel = cv2.resize(alpha_channel, (self.IMAGE_SIZE.width(), self.IMAGE_SIZE.height()),
                                            interpolation=cv2.INTER_NEAREST)
@@ -176,8 +241,8 @@ class LayerViewWidget(QScrollArea):
         if self.clicked_unit_index >= N:
             self.clicked_unit_index = 0
         last_clicked_position = (self.clicked_unit_index // self.n_w, np.remainder(self.clicked_unit_index, self.n_w))
-        lastClicked = self.grid.itemAtPosition(last_clicked_position[0], last_clicked_position[1]).widget()
-        lastClicked.clicked.emit()
+        last_clicked_unit = self.grid.itemAtPosition(last_clicked_position[0], last_clicked_position[1]).widget()
+        last_clicked_unit.clicked.emit()
 
     def unit_clicked_action(self):
         # deactivate last one
@@ -229,6 +294,7 @@ class ProbsView(QGroupBox):
 
 
 class VGG16_Vis_Demo_View(QMainWindow):
+    _busy = True
 
     def __init__(self, model, ctl):
         super(QMainWindow, self).__init__()
@@ -396,11 +462,10 @@ class VGG16_Vis_Demo_View(QMainWindow):
         hbox_backprop_mode = QHBoxLayout()
         hbox_backprop_mode.addWidget(QLabel("Backprop mode: "))
         self.combo_unit_backprop_mode = QComboBox(self)
-        self.combo_unit_backprop_mode.addItem("No backprop")
-        self.combo_unit_backprop_mode.addItem("Gradient")
-        self.combo_unit_backprop_mode.addItem("ZF deconv")
-        self.combo_unit_backprop_mode.addItem("Guided backprop")
+        for member in self.model.BackpropModeOption:
+            self.combo_unit_backprop_mode.addItem(member.value)
         self.combo_unit_backprop_mode.currentTextChanged.connect(self.load_detailed_unit_image)
+        self.combo_unit_backprop_mode.setEnabled(False)
         hbox_backprop_mode.addWidget(self.combo_unit_backprop_mode)
         vbox3.addLayout(hbox_backprop_mode)
 
@@ -408,10 +473,11 @@ class VGG16_Vis_Demo_View(QMainWindow):
         hbox_backprop_view = QHBoxLayout()
         hbox_backprop_view.addWidget(QLabel("Backprop view: "))
         self.combo_unit_backprop_view = QComboBox(self)
-        self.combo_unit_backprop_view.addItem("Raw")
-        self.combo_unit_backprop_view.addItem("Gray")
-        self.combo_unit_backprop_view.addItem("Norm")
-        self.combo_unit_backprop_view.addItem("Blurred norm")
+        for member in BigUnitViewWidget.BackpropViewOption:
+            self.combo_unit_backprop_view.addItem(member.value)
+        self.combo_unit_backprop_view.setCurrentText(BigUnitViewWidget.BackpropViewOption.RAW.value)
+        self.combo_unit_backprop_view.currentTextChanged.connect(self.switch_backprop_view_action)
+        self.combo_unit_backprop_view.setEnabled(False)
         hbox_backprop_view.addWidget(self.combo_unit_backprop_view)
         vbox3.addLayout(hbox_backprop_view)
 
@@ -527,7 +593,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
 
     def load_layer_view(self):
         if hasattr(self, 'selected_layer_name'):
-            self.statusBar().showMessage('busy')
+            self.set_busy(True)
             self.lbl_layer_name.setText("of layer <font color='blue'><b>%s</b></font>" % str(self.selected_layer_name))
             try:
                 data = self.model.get_activations(self.selected_layer_name)
@@ -536,7 +602,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
                 self.layer_view.set_units(pximaps)
             except AttributeError, Argument:
                 pass
-            self.statusBar().showMessage('ready')
+            self.set_busy(False)
 
     def select_unit_action(self, unit_index):
         if hasattr(self, 'selected_layer_name'):
@@ -547,19 +613,31 @@ class VGG16_Vis_Demo_View(QMainWindow):
 
     def load_detailed_unit_image(self):
         if hasattr(self, 'selected_layer_name') and hasattr(self, 'selected_unit_index'):
-            if self.combo_unit_view.currentText() == 'Activation':
+            self.set_busy(True)
+            mode = self.combo_unit_view.currentText()
+            if mode == 'Activation':
+                self.combo_unit_overlay.setEnabled(True)
+                self.combo_unit_backprop_view.setEnabled(False)
+                self.combo_unit_backprop_mode.setEnabled(False)
                 data = self.model.get_activations(self.selected_layer_name)
-            elif self.combo_unit_view.currentText() == 'Deconv':
+                try:
+                    data = self._prepare_data_for_display(data)
+                    self.big_unit_view.display_activation(data[self.selected_unit_index], self.model.get_data(
+                        VGG16_Vis_Demo_Model.data_idx_input_image_path))
+                except AttributeError, Argument:
+                    pass
+
+            elif mode == 'Deconv':
+                self.combo_unit_overlay.setEnabled(False)
+                self.combo_unit_backprop_view.setEnabled(True)
+                self.combo_unit_backprop_mode.setEnabled(True)
                 data = self.model.get_deconv(self.selected_layer_name, self.selected_unit_index,
                                              self.combo_unit_backprop_mode.currentText())
-            else:
-                return
-            try:
-                data = self._prepare_data_for_display(data)
-                self.big_unit_view.scale_and_set_pixmap(data[self.selected_unit_index], self.model.get_data(
-                    VGG16_Vis_Demo_Model.data_idx_input_image_path))
-            except AttributeError, Argument:
-                pass
+                try:
+                    self.big_unit_view.display_deconv(data)
+                except AttributeError, Argument:
+                    pass
+            self.set_busy(False)
 
     def _prepare_data_for_display(self, data):
         if data.max() == data.min():
@@ -569,19 +647,30 @@ class VGG16_Vis_Demo_View(QMainWindow):
         data = data.astype(np.uint8)  # convert to 8-bit unsigned integer
         return data
 
-    # argument 'data' is a 3D (conv_layer) or 2D (fc_layer) array. The first axis is the unit index
+    # if the data has colors, argument 'data' is a 4D (conv_layer) or 3D (fc_layer) array,
+    # else the 'data' is a 3D (conv_layer) or 2D (fc_layer) array.
+    # The first axis is the unit index
     @staticmethod
-    def get_pixmaps_from_data(data):
+    def get_pixmaps_from_data(data, color=False):
         pixmaps = []
         num = data.shape[0]
         for i in range(num):
-            if len(data[i].shape) < 2:
-                unit = QPixmap(QSize(8, 8))
-                unit.fill(QColor(data[i], data[i], data[i]))
+            if color:
+                if len(data[i].shape) < 3:
+                    unit = QPixmap(QSize(8, 8))
+                    unit.fill(QColor(data[i][0], data[i][1], data[i][2]))
+                else:
+                    unit = QImage(data[i][:], data[i].shape[2], data[i].shape[1], data[i].shape[1] * 3,
+                                  QImage.Format_RGB888)
+                    unit = QPixmap.fromImage(unit)
             else:
-                unit = QImage(data[i][:], data[i].shape[1], data[i].shape[0], data[i].shape[0],
-                              QImage.Format_Grayscale8)
-                unit = QPixmap.fromImage(unit)
+                if len(data[i].shape) < 2:
+                    unit = QPixmap(QSize(8, 8))
+                    unit.fill(QColor(data[i], data[i], data[i]))
+                else:
+                    unit = QImage(data[i][:], data[i].shape[1], data[i].shape[0], data[i].shape[0],
+                                  QImage.Format_Grayscale8)
+                    unit = QPixmap.fromImage(unit)
             pixmaps.append(unit)
         return pixmaps
 
@@ -594,14 +683,26 @@ class VGG16_Vis_Demo_View(QMainWindow):
         labels = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_labels)
         self.probs_view.set_probs(results, labels)
 
-        # load layer view
+        # load layer view. This also triggers the last clicked unit to be loaded in unit view
         self.load_layer_view()
 
     def overlay_action(self, mode):
-        self.big_unit_view.setOverlay(mode)
+        self.big_unit_view.set_overlay_view(mode)
+
+    def switch_backprop_view_action(self, mode):
+        self.big_unit_view.set_backprop_view(mode)
 
     def toggle_input_background(self, state):
         if state == Qt.Checked:
             self.lbl_input_image.setStyleSheet("QWidget {background-color: black}")
         else:
             self.lbl_input_image.setStyleSheet("QWidget { background-color: %s }" % self.palette().color(10).name())
+
+    def set_busy(self, isBusy):
+        if self._busy != isBusy:
+            self._busy = isBusy
+            statusbar = self.statusBar()
+            if isBusy:
+                statusbar.showMessage('Busy')
+            else:
+                statusbar.showMessage('Ready')
