@@ -43,11 +43,22 @@ def norm0255c(arr, center):
 class BigUnitViewWidget(QLabel):
     IMAGE_SIZE = QSize(224, 224)
 
+    class WorkingMode(Enum):
+        ACTIVATION = 'Activation'
+        DECONV = 'Deconv'
+
     class BackpropViewOption(Enum):
         RAW = 'raw'
         GRAY = 'gray'
         NORM = 'norm'
         NORM_BLUR = 'blurred norm'
+
+    class OverlayOptions(Enum):
+        No_OVERLAY = 'No overlay'
+        OVER_ACTIVE = 'Over active'
+        OVER_INACTIVE = 'Over inactive'
+        ONLY_ACTIVE = 'Only active'
+        ONLY_INACTIVE = 'Only inactive'
 
     def __init__(self):
         super(QLabel, self).__init__()
@@ -59,18 +70,18 @@ class BigUnitViewWidget(QLabel):
         self.setContentsMargins(QMargins(0, 0, 0, 0))
         self.setFixedSize(QSize(240, 240))
         self.setStyleSheet("QWidget {background-color: blue}")
-        self.overlay_mode = 'No overlay'
-        self.working_mode = 'Activation'
-        self.backprop_view_mode = 'raw'
+        self.overlay_mode = self.OverlayOptions.No_OVERLAY.value
+        self.working_mode = self.WorkingMode.ACTIVATION.value
+        self.backprop_view_mode = self.BackpropViewOption.RAW.value
 
     def display_activation(self, data, input_image_path):
-        self.working_mode = 'Activation'
+        self.working_mode = self.WorkingMode.ACTIVATION.value
         self.activation = data
         self.input_image_path = input_image_path
         self.set_overlay_view(self.overlay_mode)
 
     def display_deconv(self, data):
-        self.working_mode = 'Deconv'
+        self.working_mode = self.WorkingMode.DECONV.value
         self.deconv = data
         self.set_backprop_view(self.backprop_view_mode)
 
@@ -80,7 +91,7 @@ class BigUnitViewWidget(QLabel):
 
     def set_backprop_view(self, view_mode=BackpropViewOption.RAW.value):
         self.backprop_view_mode = view_mode
-        if hasattr(self, 'deconv') == False or self.working_mode != 'Deconv':
+        if hasattr(self, 'deconv') == False or self.working_mode != self.WorkingMode.DECONV.value:
             return
 
         data = self.deconv
@@ -89,7 +100,7 @@ class BigUnitViewWidget(QLabel):
             data = norm0255c(data, 0)
         elif view_mode == self.BackpropViewOption.GRAY.value:
             data = norm0255c(data.mean(axis=2), 0)
-            data = np.dstack([data]*3)  # 244x224 => 224x224x3 (RGB!)
+            data = np.dstack([data] * 3)  # 244x224 => 224x224x3 (RGB!)
         elif view_mode == self.BackpropViewOption.NORM.value or view_mode == self.BackpropViewOption.NORM_BLUR.value:
             data = np.linalg.norm(data, axis=2)
             if view_mode == self.BackpropViewOption.NORM_BLUR.value:
@@ -107,13 +118,14 @@ class BigUnitViewWidget(QLabel):
         pixmap = QPixmap.fromImage(image)
         self.setPixmap(pixmap)
 
-    def set_overlay_view(self, mode='No overlay'):
+    def set_overlay_view(self, mode=OverlayOptions.No_OVERLAY.value):
         self.overlay_mode = mode
-        if hasattr(self, 'activation') == False or self.working_mode != 'Activation':
+        if not hasattr(self, 'activation') or self.working_mode != self.WorkingMode.ACTIVATION.value:
             return
 
         # prepare base image
-        if mode == 'No overlay' or mode == 'Over active' or mode == 'Over inactive':
+        if mode == self.OverlayOptions.No_OVERLAY.value or mode == self.OverlayOptions.ONLY_ACTIVE.value or \
+                mode == self.OverlayOptions.OVER_INACTIVE.value:
             pixmap = VGG16_Vis_Demo_View.get_pixmaps_from_data(np.array([self.activation, ]))[0]
             pixmap = pixmap.scaledToWidth(self.IMAGE_SIZE.width())
         else:
@@ -121,7 +133,7 @@ class BigUnitViewWidget(QLabel):
             pixmap.fill(Qt.black)
 
         # Overlay
-        if not mode == 'No overlay':
+        if not mode == self.OverlayOptions.No_OVERLAY.value:
             data = self.activation
 
             # use sigmoid function to add non-linearity near border
@@ -132,7 +144,7 @@ class BigUnitViewWidget(QLabel):
             data_norm = np.divide(data - border, stretch_factor)
             alpha = 255 / (1 + np.exp(-data_norm))
 
-            if mode == 'Over inactive' or mode == 'Only inactive':
+            if mode == self.OverlayOptions.OVER_INACTIVE.value or mode == self.OverlayOptions.ONLY_INACTIVE.value:
                 alpha = 255 - alpha
 
             if len(self.activation.shape) > 1:
@@ -432,9 +444,10 @@ class VGG16_Vis_Demo_View(QMainWindow):
 
         # header
         self.combo_unit_view = QComboBox(self)
-        self.combo_unit_view.addItem('Activation')
-        self.combo_unit_view.addItem('Deconv')
+        for member in BigUnitViewWidget.WorkingMode:
+            self.combo_unit_view.addItem(member.value)
         self.combo_unit_view.currentTextChanged.connect(self.load_detailed_unit_image)
+        self.combo_unit_view.setCurrentText(BigUnitViewWidget.WorkingMode.ACTIVATION.value)
         selected_unit_name = ' '
         self.lbl_unit_name = QLabel(
             "of unit <font color='blue'><b>%r</b></font>" % selected_unit_name)
@@ -449,11 +462,8 @@ class VGG16_Vis_Demo_View(QMainWindow):
         hbox_overlay = QHBoxLayout()
         hbox_overlay.addWidget(QLabel("Overlay: "))
         self.combo_unit_overlay = QComboBox(self)
-        self.combo_unit_overlay.addItem("No overlay")
-        self.combo_unit_overlay.addItem("Over active")
-        self.combo_unit_overlay.addItem("Over inactive")
-        self.combo_unit_overlay.addItem("Only active")
-        self.combo_unit_overlay.addItem("Only inactive")
+        for member in BigUnitViewWidget.OverlayOptions:
+            self.combo_unit_overlay.addItem(member.value)
         self.combo_unit_overlay.activated[str].connect(self.overlay_action)
         hbox_overlay.addWidget(self.combo_unit_overlay)
         vbox3.addLayout(hbox_overlay)
@@ -615,7 +625,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
         if hasattr(self, 'selected_layer_name') and hasattr(self, 'selected_unit_index'):
             self.set_busy(True)
             mode = self.combo_unit_view.currentText()
-            if mode == 'Activation':
+            if mode == BigUnitViewWidget.WorkingMode.ACTIVATION.value:
                 self.combo_unit_overlay.setEnabled(True)
                 self.combo_unit_backprop_view.setEnabled(False)
                 self.combo_unit_backprop_mode.setEnabled(False)
@@ -627,7 +637,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
                 except AttributeError, Argument:
                     pass
 
-            elif mode == 'Deconv':
+            elif mode == BigUnitViewWidget.WorkingMode.DECONV.value:
                 self.combo_unit_overlay.setEnabled(False)
                 self.combo_unit_backprop_view.setEnabled(True)
                 self.combo_unit_backprop_mode.setEnabled(True)
