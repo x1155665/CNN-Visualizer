@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (QAction, qApp, QTextEdit, QMainWindow, QMessageBox,
                              QLCDNumber, QSlider, QLineEdit, QRadioButton, QGroupBox, QScrollArea, QCheckBox,
                              QInputDialog, QFrame, QColorDialog, QFileDialog, QProgressBar, QSplitter)
 from PyQt5.QtGui import QFont, QIcon, QColor, QPainter, QPen, QPixmap, QImage
-from PyQt5.QtCore import Qt, pyqtSignal, QObject, QBasicTimer, QSize, QMargins
+from PyQt5.QtCore import Qt, pyqtSignal, QObject, QBasicTimer, QSize, QMargins, QThread
 import numpy as np
 import itertools
 import os
@@ -12,6 +12,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import cv2
 from enum import Enum
+import time
 
 from VGG16_Vis_Demo_Model import VGG16_Vis_Demo_Model
 
@@ -40,7 +41,7 @@ def norm0255c(arr, center):
 
 
 # detailed unit view
-class BigUnitViewWidget(QLabel):
+class DetailedUnitViewWidget(QLabel):
     IMAGE_SIZE = QSize(224, 224)
 
     class WorkingMode(Enum):
@@ -126,7 +127,7 @@ class BigUnitViewWidget(QLabel):
         # prepare base image
         if mode == self.OverlayOptions.No_OVERLAY.value or mode == self.OverlayOptions.ONLY_ACTIVE.value or \
                 mode == self.OverlayOptions.OVER_INACTIVE.value:
-            pixmap = VGG16_Vis_Demo_View.get_pixmaps_from_data(np.array([self.activation, ]))[0]
+            pixmap = VGG16_Vis_Demo_View.get_pixmaps_from_data(np.array([self.activation.astype(np.uint8), ]))[0]
             pixmap = pixmap.scaledToWidth(self.IMAGE_SIZE.width())
         else:
             pixmap = QPixmap(self.IMAGE_SIZE)
@@ -139,7 +140,6 @@ class BigUnitViewWidget(QLabel):
             # use sigmoid function to add non-linearity near border
             border = 32
             delta = 6.3  # delta=(255-border)/stretch_factor=(0-border)/stretch_factor
-            data = data.astype(np.float32)
             stretch_factor = border / delta + (255 - 2 * border) / delta / 255 * data  # linear function
             data_norm = np.divide(data - border, stretch_factor)
             alpha = 255 / (1 + np.exp(-data_norm))
@@ -236,7 +236,7 @@ class LayerViewWidget(QScrollArea):
 
         # if the resulting unit size is too small, display the unit s with the allowed minimum size
         allowed_min_width = np.ceil(np.multiply(oroginal_unit_width, self.MIN_SCALE_FAKTOR))
-        displayed_unit_width = np.maximum(d - BORDER_WIDTH, allowed_min_width)
+        self.displayed_unit_width = np.maximum(d - BORDER_WIDTH, allowed_min_width)
 
         self.n_w = np.floor(W / d)
         self.n_h = np.ceil(N / self.n_w)
@@ -246,11 +246,14 @@ class LayerViewWidget(QScrollArea):
             unitView = SmallUnitViewWidget()
             unitView.clicked.connect(self.unit_clicked_action)
             unitView.index = position[0] * self.n_w + position[1]
-            scaled_image = unit.scaledToWidth(displayed_unit_width)
+            scaled_image = unit.scaledToWidth(self.displayed_unit_width)
             unitView.setPixmap(scaled_image)
             unitView.setFixedSize(QSize(d, d))
             self.grid.addWidget(unitView, *position)
-        if self.clicked_unit_index >= N:
+        self._activate_last_clicked_unit()
+
+    def _activate_last_clicked_unit(self):
+        if self.clicked_unit_index >= len(self.units):
             self.clicked_unit_index = 0
         last_clicked_position = (self.clicked_unit_index // self.n_w, np.remainder(self.clicked_unit_index, self.n_w))
         last_clicked_unit = self.grid.itemAtPosition(last_clicked_position[0], last_clicked_position[1]).widget()
@@ -264,6 +267,7 @@ class LayerViewWidget(QScrollArea):
         # activate the clicked one
         clicked_unit = self.sender()
         clicked_unit.setStyleSheet("QWidget {  background-color: blue}")
+        start = time.time()
         self.clicked_unit_changed.emit(clicked_unit.index)  # notify the main view to change the unit view
         self.clicked_unit_index = clicked_unit.index
 
@@ -275,8 +279,19 @@ class LayerViewWidget(QScrollArea):
         self.allocate_units(self.units)
 
     def set_units(self, units):
+        last_units_number = len(self.units)
         self.units = units
-        self.rearrange()
+        if last_units_number == len(units):
+            # if the arrangement will not be changed, simply update pixmaps to speed up loading
+            self.update_data()
+        else:
+            self.rearrange()
+
+    def update_data(self):
+        for i in range(len(self.units)):
+            unit_widget = self.grid.itemAt(i).widget()
+            unit_widget.setPixmap(self.units[i].scaledToWidth(self.displayed_unit_width))
+        self._activate_last_clicked_unit()
 
     def clear_grid(self):
         while self.grid.count():
@@ -306,14 +321,16 @@ class ProbsView(QGroupBox):
 
 
 class VGG16_Vis_Demo_View(QMainWindow):
-    _busy = True
+    _busy = 0
 
     def __init__(self, model, ctl):
         super(QMainWindow, self).__init__()
         self.model = model
         self.ctl = ctl
         self.model.dataChanged[int].connect(self.update_data)
+        self.ctl.isBusy[bool].connect(self.set_busy)
         self.initUI()
+        self.ctl.start(priority=QThread.LowestPriority)
 
     def initUI(self):
         # region vbox1
@@ -444,10 +461,10 @@ class VGG16_Vis_Demo_View(QMainWindow):
 
         # header
         self.combo_unit_view = QComboBox(self)
-        for member in BigUnitViewWidget.WorkingMode:
+        for member in DetailedUnitViewWidget.WorkingMode:
             self.combo_unit_view.addItem(member.value)
         self.combo_unit_view.currentTextChanged.connect(self.load_detailed_unit_image)
-        self.combo_unit_view.setCurrentText(BigUnitViewWidget.WorkingMode.ACTIVATION.value)
+        self.combo_unit_view.setCurrentText(DetailedUnitViewWidget.WorkingMode.ACTIVATION.value)
         selected_unit_name = ' '
         self.lbl_unit_name = QLabel(
             "of unit <font color='blue'><b>%r</b></font>" % selected_unit_name)
@@ -462,7 +479,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
         hbox_overlay = QHBoxLayout()
         hbox_overlay.addWidget(QLabel("Overlay: "))
         self.combo_unit_overlay = QComboBox(self)
-        for member in BigUnitViewWidget.OverlayOptions:
+        for member in DetailedUnitViewWidget.OverlayOptions:
             self.combo_unit_overlay.addItem(member.value)
         self.combo_unit_overlay.activated[str].connect(self.overlay_action)
         hbox_overlay.addWidget(self.combo_unit_overlay)
@@ -483,9 +500,9 @@ class VGG16_Vis_Demo_View(QMainWindow):
         hbox_backprop_view = QHBoxLayout()
         hbox_backprop_view.addWidget(QLabel("Backprop view: "))
         self.combo_unit_backprop_view = QComboBox(self)
-        for member in BigUnitViewWidget.BackpropViewOption:
+        for member in DetailedUnitViewWidget.BackpropViewOption:
             self.combo_unit_backprop_view.addItem(member.value)
-        self.combo_unit_backprop_view.setCurrentText(BigUnitViewWidget.BackpropViewOption.RAW.value)
+        self.combo_unit_backprop_view.setCurrentText(DetailedUnitViewWidget.BackpropViewOption.RAW.value)
         self.combo_unit_backprop_view.currentTextChanged.connect(self.switch_backprop_view_action)
         self.combo_unit_backprop_view.setEnabled(False)
         hbox_backprop_view.addWidget(self.combo_unit_backprop_view)
@@ -494,8 +511,8 @@ class VGG16_Vis_Demo_View(QMainWindow):
         # endregion
 
         # unit image
-        self.big_unit_view = BigUnitViewWidget()
-        vbox3.addWidget(self.big_unit_view)
+        self.detailed_unit_view = DetailedUnitViewWidget()
+        vbox3.addWidget(self.detailed_unit_view)
 
         # spacer
         vbox3.addSpacing(20)
@@ -568,9 +585,8 @@ class VGG16_Vis_Demo_View(QMainWindow):
         central_widget = QWidget()
         central_widget.setLayout(hbox)
 
-        statusbar = self.statusBar()
-        statusbar.showMessage('ready')
-        self.ctl.set_statusbar_instance(statusbar)
+        self.statusbar = self.statusBar()
+        self.statusbar.showMessage('ready')
         self.setCentralWidget(central_widget)
         self.setWindowTitle('VGG16 Visualizer')
         self.center()
@@ -603,16 +619,20 @@ class VGG16_Vis_Demo_View(QMainWindow):
 
     def load_layer_view(self):
         if hasattr(self, 'selected_layer_name'):
+
             self.set_busy(True)
             self.lbl_layer_name.setText("of layer <font color='blue'><b>%s</b></font>" % str(self.selected_layer_name))
             try:
                 data = self.model.get_activations(self.selected_layer_name)
                 data = self._prepare_data_for_display(data)
+                start = time.time()
                 pximaps = self.get_pixmaps_from_data(data)
+                print("get pixmap from data time: " + str(time.time() - start))
                 self.layer_view.set_units(pximaps)
             except AttributeError, Argument:
                 pass
             self.set_busy(False)
+            print("load layer time: " + str(time.time() - start))
 
     def select_unit_action(self, unit_index):
         if hasattr(self, 'selected_layer_name'):
@@ -625,36 +645,38 @@ class VGG16_Vis_Demo_View(QMainWindow):
         if hasattr(self, 'selected_layer_name') and hasattr(self, 'selected_unit_index'):
             self.set_busy(True)
             mode = self.combo_unit_view.currentText()
-            if mode == BigUnitViewWidget.WorkingMode.ACTIVATION.value:
+            if mode == DetailedUnitViewWidget.WorkingMode.ACTIVATION.value:
                 self.combo_unit_overlay.setEnabled(True)
                 self.combo_unit_backprop_view.setEnabled(False)
                 self.combo_unit_backprop_mode.setEnabled(False)
                 data = self.model.get_activations(self.selected_layer_name)
                 try:
                     data = self._prepare_data_for_display(data)
-                    self.big_unit_view.display_activation(data[self.selected_unit_index], self.model.get_data(
+                    self.detailed_unit_view.display_activation(data[self.selected_unit_index], self.model.get_data(
                         VGG16_Vis_Demo_Model.data_idx_input_image_path))
                 except AttributeError, Argument:
                     pass
 
-            elif mode == BigUnitViewWidget.WorkingMode.DECONV.value:
+            elif mode == DetailedUnitViewWidget.WorkingMode.DECONV.value:
                 self.combo_unit_overlay.setEnabled(False)
                 self.combo_unit_backprop_view.setEnabled(True)
                 self.combo_unit_backprop_mode.setEnabled(True)
                 data = self.model.get_deconv(self.selected_layer_name, self.selected_unit_index,
                                              self.combo_unit_backprop_mode.currentText())
                 try:
-                    self.big_unit_view.display_deconv(data)
+                    self.detailed_unit_view.display_deconv(data)
                 except AttributeError, Argument:
                     pass
             self.set_busy(False)
 
     def _prepare_data_for_display(self, data):
-        if data.max() == data.min():
+        max = data.max()
+        min = data.min()
+        range = max - min
+        if range == 0:
             data = data / data * 255  # prevent division by zero
         else:
-            data = (data - data.min()) / (data.max() - data.min()) * 255  # normalize data for display
-        data = data.astype(np.uint8)  # convert to 8-bit unsigned integer
+            data = (data - min) / range * 255  # normalize data for display
         return data
 
     # if the data has colors, argument 'data' is a 4D (conv_layer) or 3D (fc_layer) array,
@@ -662,6 +684,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
     # The first axis is the unit index
     @staticmethod
     def get_pixmaps_from_data(data, color=False):
+        data = data.astype(np.uint8)  # convert to 8-bit unsigned integer
         pixmaps = []
         num = data.shape[0]
         for i in range(num):
@@ -697,10 +720,10 @@ class VGG16_Vis_Demo_View(QMainWindow):
         self.load_layer_view()
 
     def overlay_action(self, mode):
-        self.big_unit_view.set_overlay_view(mode)
+        self.detailed_unit_view.set_overlay_view(mode)
 
     def switch_backprop_view_action(self, mode):
-        self.big_unit_view.set_backprop_view(mode)
+        self.detailed_unit_view.set_backprop_view(mode)
 
     def toggle_input_background(self, state):
         if state == Qt.Checked:
@@ -709,10 +732,12 @@ class VGG16_Vis_Demo_View(QMainWindow):
             self.lbl_input_image.setStyleSheet("QWidget { background-color: %s }" % self.palette().color(10).name())
 
     def set_busy(self, isBusy):
-        if self._busy != isBusy:
-            self._busy = isBusy
-            statusbar = self.statusBar()
-            if isBusy:
-                statusbar.showMessage('Busy')
-            else:
-                statusbar.showMessage('Ready')
+        previous_busy_count = self._busy
+        if isBusy:
+            self._busy += 1
+        else:
+            self._busy -= 1
+        if self._busy == 0:
+            self.statusbar.showMessage('Ready')
+        elif previous_busy_count == 0:
+            self.statusbar.showMessage('Busy')

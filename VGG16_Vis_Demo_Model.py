@@ -5,6 +5,8 @@ from PyQt5.QtGui import QPixmap, QImage
 import os
 import matplotlib.pyplot as plt
 from enum import Enum
+from multiprocessing import Process, Queue, Manager
+import time
 
 model_names = ['icons']
 model_folders = {"icons": "./Models/icons"}
@@ -57,7 +59,8 @@ class VGG16_Vis_Demo_Model(QObject):
 
     def __init__(self):
         super(QObject, self).__init__()
-        caffe.set_mode_cpu()
+        #caffe.set_device(0)
+        caffe.set_mode_gpu()
         self.online = False
 
     def set_model(self, model_name):
@@ -94,6 +97,7 @@ class VGG16_Vis_Demo_Model(QObject):
             image = caffe.io.resize(image, [224, 224], mode='constant', cval=0)
             transformed_image = self._transformer.preprocess('data', image)
             self._net.blobs['data'].data[...] = transformed_image
+            caffe.set_mode_gpu()  # otherwise caffe will run with cpu!!!
             self._net.forward()
             self.online = True
             self.dataChanged.emit(self.data_idx_new_input)
@@ -115,6 +119,7 @@ class VGG16_Vis_Demo_Model(QObject):
             return self.input_image_path
 
     def get_activations(self, layer_name):
+        caffe.set_mode_gpu()
         if self.online and vgg16_layer_names.__contains__(layer_name):
             activations = self._net.blobs[layer_name].data[0]
             return activations
