@@ -97,7 +97,6 @@ class VGG16_Vis_Demo_Model(QObject):
             image = caffe.io.resize(image, [224, 224], mode='constant', cval=0)
             transformed_image = self._transformer.preprocess('data', image)
             self._net.blobs['data'].data[...] = transformed_image
-            caffe.set_mode_gpu()  # otherwise caffe will run with cpu!!!
             self._net.forward()
             self.online = True
             self.dataChanged.emit(self.data_idx_new_input)
@@ -119,7 +118,6 @@ class VGG16_Vis_Demo_Model(QObject):
             return self.input_image_path
 
     def get_activations(self, layer_name):
-        caffe.set_mode_gpu()
         if self.online and vgg16_layer_names.__contains__(layer_name):
             activations = self._net.blobs[layer_name].data[0]
             return activations
