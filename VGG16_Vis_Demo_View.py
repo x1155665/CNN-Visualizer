@@ -75,10 +75,10 @@ class DetailedUnitViewWidget(QLabel):
         self.working_mode = self.WorkingMode.ACTIVATION.value
         self.backprop_view_mode = self.BackpropViewOption.RAW.value
 
-    def display_activation(self, data, input_image_path):
+    def display_activation(self, data, input_image):
         self.working_mode = self.WorkingMode.ACTIVATION.value
         self.activation = data
-        self.input_image_path = input_image_path
+        self.input_image = input_image
         self.set_overlay_view(self.overlay_mode)
 
     def display_deconv(self, data):
@@ -114,7 +114,8 @@ class DetailedUnitViewWidget(QLabel):
             data = np.delete(rgba_image, 3, 2)
             data *= 255
 
-        data = data.astype(np.uint8)
+        if data.dtype != np.uint8:
+            data = data.astype(np.uint8)
         image = QImage(data.tobytes(), data.shape[0], data.shape[1], data.shape[1] * 3, QImage.Format_RGB888)
         pixmap = QPixmap.fromImage(image)
         self.setPixmap(pixmap)
@@ -155,9 +156,7 @@ class DetailedUnitViewWidget(QLabel):
                 alpha_channel = np.full((self.IMAGE_SIZE.width(), self.IMAGE_SIZE.height()), alpha)
             alpha_channel = np.expand_dims(alpha_channel, 2)
 
-            input_RGB = cv2.imread(self.input_image_path, 1)[:, :, (2, 1, 0)]
-            input_RGB = cv2.resize(input_RGB, (self.IMAGE_SIZE.width(), self.IMAGE_SIZE.height()))
-            input_ARGB = np.dstack((alpha_channel, input_RGB))[:, :, (3, 2, 1, 0)]  # dstack will reverse the order
+            input_ARGB = np.dstack((alpha_channel, self.input_image))[:, :, (3, 2, 1, 0)]  # dstack will reverse the order
             input_ARGB = input_ARGB.astype(np.uint8)
             input_image = QImage(input_ARGB.tobytes(), input_ARGB.shape[0], input_ARGB.shape[1],
                                  input_ARGB.shape[1] * 4, QImage.Format_ARGB32)
@@ -355,18 +354,16 @@ class VGG16_Vis_Demo_View(QMainWindow):
         combo_input_source.addItem('')  # null entry
         combo_input_source.addItem('Image')
         combo_input_source.addItem('Video')
+        combo_input_source.activated[str].connect(self.ctl.switch_source)
+        combo_input_source.setCurrentText('Image')
         self.combo_input_image = QComboBox(self)
         self.combo_input_image.addItem('')  # null entry
         self.combo_input_image.activated[str].connect(self.ctl.set_input_image)
-        ckb_input_image_background = QCheckBox('Background')
-        ckb_input_image_background.setToolTip('The network loads PNG images with black background.')
-        ckb_input_image_background.stateChanged.connect(self.toggle_input_background)
         grid_input.addWidget(lbl_model, 0, 1)
         grid_input.addWidget(combo_model, 0, 2)
         grid_input.addWidget(lbl_input, 1, 1)
         grid_input.addWidget(combo_input_source, 1, 2)
         grid_input.addWidget(self.combo_input_image, 2, 1, 1, 2)
-        grid_input.addWidget(ckb_input_image_background, 3, 1, 1, 2)
         vbox1.addLayout(grid_input)
 
         pixm_input = QPixmap(QSize(224, 224))
@@ -622,12 +619,11 @@ class VGG16_Vis_Demo_View(QMainWindow):
 
             self.set_busy(True)
             self.lbl_layer_name.setText("of layer <font color='blue'><b>%s</b></font>" % str(self.selected_layer_name))
+            start = time.time()
             try:
                 data = self.model.get_activations(self.selected_layer_name)
                 data = self._prepare_data_for_display(data)
-                start = time.time()
                 pximaps = self.get_pixmaps_from_data(data)
-                print("get pixmap from data time: " + str(time.time() - start))
                 self.layer_view.set_units(pximaps)
             except AttributeError, Argument:
                 pass
@@ -653,7 +649,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
                 try:
                     data = self._prepare_data_for_display(data)
                     self.detailed_unit_view.display_activation(data[self.selected_unit_index], self.model.get_data(
-                        VGG16_Vis_Demo_Model.data_idx_input_image_path))
+                        VGG16_Vis_Demo_Model.data_idx_input_image))
                 except AttributeError, Argument:
                     pass
 
@@ -709,7 +705,11 @@ class VGG16_Vis_Demo_View(QMainWindow):
 
     def refresh(self):
         # get input image
-        self.lbl_input_image.setPixmap(QPixmap(self.model.get_data(VGG16_Vis_Demo_Model.data_idx_input_image_path)))
+        input_data = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_input_image)
+        if input_data.dtype != np.uint8:
+            input_data = input_data.astype(np.uint8)
+        image = QImage(input_data.tobytes(), input_data.shape[0], input_data.shape[1], input_data.shape[1] * 3, QImage.Format_RGB888)
+        self.lbl_input_image.setPixmap(QPixmap.fromImage(image))
 
         # get probs
         results = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_probs)
@@ -725,18 +725,13 @@ class VGG16_Vis_Demo_View(QMainWindow):
     def switch_backprop_view_action(self, mode):
         self.detailed_unit_view.set_backprop_view(mode)
 
-    def toggle_input_background(self, state):
-        if state == Qt.Checked:
-            self.lbl_input_image.setStyleSheet("QWidget {background-color: black}")
-        else:
-            self.lbl_input_image.setStyleSheet("QWidget { background-color: %s }" % self.palette().color(10).name())
-
     def set_busy(self, isBusy):
         previous_busy_count = self._busy
         if isBusy:
             self._busy += 1
         else:
             self._busy -= 1
+        assert self._busy >= 0  # setting not_busy before setting busy is not allowed!
         if self._busy == 0:
             self.statusbar.showMessage('Ready')
         elif previous_busy_count == 0:

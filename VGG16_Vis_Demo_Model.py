@@ -3,6 +3,7 @@ import numpy as np
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
 from PyQt5.QtGui import QPixmap, QImage
 import os
+import cv2
 import matplotlib.pyplot as plt
 from enum import Enum
 from multiprocessing import Process, Queue, Manager
@@ -47,7 +48,7 @@ class VGG16_Vis_Demo_Model(QObject):
     data_idx_layer_activation = 3
     data_idx_probs = 4
     data_idx_input_image_names = 5
-    data_idx_input_image = 6  # to be removed
+    data_idx_input_image = 6
     data_idx_labels = 7
     data_idx_new_input = 128
     data_idx_input_image_path = 8
@@ -59,8 +60,14 @@ class VGG16_Vis_Demo_Model(QObject):
 
     def __init__(self):
         super(QObject, self).__init__()
-        #caffe.set_device(0)
+        # caffe.set_device(0)
         caffe.set_mode_gpu()
+        self.cap = cv2.VideoCapture(0)
+
+        # setting frame size not working properly
+        # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 224)
+        # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 224)
+
         self.online = False
 
     def set_model(self, model_name):
@@ -90,16 +97,39 @@ class VGG16_Vis_Demo_Model(QObject):
         self._transformer.set_mean('data', mean)  # subtract the dataset-mean value in each channel
         self._transformer.set_raw_scale('data', 255)  # rescale from [0, 1] to [0, 255]
 
-    def set_input_and_forward(self, input_image_name):
-        if self._input_image_names.__contains__(input_image_name):
-            self.input_image_path = os.path.join(input_image_paths[self._model_name], input_image_name)
-            image = caffe.io.load_image(self.input_image_path)
-            image = caffe.io.resize(image, [224, 224], mode='constant', cval=0)
-            transformed_image = self._transformer.preprocess('data', image)
+    def set_input_and_forward(self, input_image_name, video=False):
+        def _forward_image(_image):
+            input_image = caffe.io.resize(_image, [224, 224], mode='constant', cval=0)
+            self._input_image = (input_image * 255).astype(np.uint8)
+            transformed_image = self._transformer.preprocess('data', input_image)
             self._net.blobs['data'].data[...] = transformed_image
+            start = time.time()
             self._net.forward()
+            print('forward time: ' + str(time.time() - start))
             self.online = True
             self.dataChanged.emit(self.data_idx_new_input)
+
+        # crop the biggest square from the center of a image
+        def _crop_max_square(_image):
+            h, w, c = _image.shape
+            l = min(h, w)
+            if (h + l) % 2 != 0:
+                _image = _image[(h - l + 1) / 2:(h + l + 1) / 2, :, :]
+            elif (w + l) % 2 != 0:
+                _image = _image[:, (w - l + 1) / 2:(w + l + 1) / 2, :]
+            else:
+                _image = _image[(h - l) / 2:(h + l) / 2, (w - l) / 2:(w + l) / 2, :]
+            return _image
+
+        if video:
+            ret, frame = self.cap.read()
+            squared_image = _crop_max_square(frame)
+            _forward_image(cv2.flip(squared_image[:, :, (2, 1, 0)], 1))
+        else:
+            if self._input_image_names.__contains__(input_image_name):
+                self._input_image_path = os.path.join(input_image_paths[self._model_name], input_image_name)
+                image = caffe.io.load_image(self._input_image_path)
+                _forward_image(image)
 
     def get_data(self, data_idx):
         if data_idx == self.data_idx_model_names:
@@ -115,7 +145,9 @@ class VGG16_Vis_Demo_Model(QObject):
         elif data_idx == self.data_idx_labels:
             return self._labels
         elif data_idx == self.data_idx_input_image_path:
-            return self.input_image_path
+            return self._input_image_path
+        elif data_idx == self.data_idx_input_image:
+            return self._input_image
 
     def get_activations(self, layer_name):
         if self.online and vgg16_layer_names.__contains__(layer_name):
@@ -156,7 +188,6 @@ class VGG16_Vis_Demo_Model(QObject):
         return evaluation
 
     def _process_network_proto(self, prototxt):
-
         processed_prototxt = prototxt + ".processed_by_deepvis"
 
         # check if force_backwards is missing
@@ -181,3 +212,9 @@ class VGG16_Vis_Demo_Model(QObject):
         os.system(upgrade_tool_command_line)
 
         return processed_prototxt
+
+    def switch_camera(self, on):
+        if on:
+            self.cap.open(0)
+        else:
+            self.cap.release()
