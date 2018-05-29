@@ -9,12 +9,13 @@ from enum import Enum
 from multiprocessing import Process, Queue, Manager
 import time
 
-model_names = ['icons']
-model_folders = {"icons": "./Models/icons"}
-weights_file = {"icons": "./Models/icons/icons_vgg16.caffemodel"}
-prototxts = {"icons": "./Models/icons/VGG_ICONS_16_layers_deploy.prototxt"}
-label_files = {"icons": "./Models/icons/labels.txt"}
-input_image_paths = {"icons": "./Models/icons/input_images"}
+model_names = ['icons', 'Simpsons']
+model_folders = {"icons": "./Models/icons", "Simpsons": "./Models/Simpsons"}
+weights_file = {"icons": "./Models/icons/icons_vgg16.caffemodel",
+                "Simpsons": "./Models/Simpsons/Simpsons_vgg16.caffemodel"}
+prototxts = {"icons": "./Models/icons/VGG_ICONS_16_layers_deploy.prototxt", "Simpsons": "./Models/Simpsons/VGG_16_Simpsons_deploy.prototxt"}
+label_files = {"icons": "./Models/icons/labels.txt", "Simpsons": "./Models/Simpsons/labels.txt"}
+input_image_paths = {"icons": "./Models/icons/input_images", "Simpsons": "./Models/Simpsons/input_images"}
 
 caffevis_caffe_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(caffe.__file__))))
 
@@ -89,8 +90,7 @@ class VGG16_Vis_Demo_Model(QObject):
         self._net.blobs[self._net.inputs[0]].reshape(*current_input_shape)
         self._net.reshape()
 
-        self._input_image_names = [icon_name for icon_name in os.listdir(input_image_paths[self._model_name]) if
-                                   ".png" in icon_name]
+        self._input_image_names = [icon_name for icon_name in os.listdir(input_image_paths[self._model_name]) ]
         self.dataChanged.emit(self.data_idx_input_image_names)
         self._transformer = caffe.io.Transformer({'data': self._net.blobs['data'].data.shape})
         self._transformer.set_transpose('data', (2, 0, 1))  # move image channels to outermost dimension
@@ -98,6 +98,13 @@ class VGG16_Vis_Demo_Model(QObject):
         self._transformer.set_raw_scale('data', 255)  # rescale from [0, 1] to [0, 255]
 
     def set_input_and_forward(self, input_image_name, video=False):
+        """
+        use static image file or camera as input to forward the network.
+        If video is set, input_image_name will be ignored.
+        View will be informed to resfresh the content.
+        :param input_image_name: The file name of the local image file
+        :param video: set True to use camera s input
+        """
         def _forward_image(_image):
             input_image = caffe.io.resize(_image, [224, 224], mode='constant', cval=0)
             self._input_image = (input_image * 255).astype(np.uint8)
@@ -109,8 +116,36 @@ class VGG16_Vis_Demo_Model(QObject):
             self.online = True
             self.dataChanged.emit(self.data_idx_new_input)
 
-        # crop the biggest square from the center of a image
+        def _square(_image):
+            # adjust image dimensions so that the image will be expanded to the largest side
+            # padding order: top, bottom, left, right
+            [height, width, _] = _image.shape
+            # icon portrait mode
+            if width < height:
+                pad_size = height - width
+                if pad_size % 2 == 0:
+                    icon_squared = cv2.copyMakeBorder(_image, 0, 0, pad_size / 2, pad_size / 2, cv2.BORDER_CONSTANT,
+                                                      value=[0, 0, 0])
+                else:
+                    icon_squared = cv2.copyMakeBorder(_image, 0, 0, pad_size / 2 + 1, pad_size / 2, cv2.BORDER_CONSTANT,
+                                                      value=[0, 0, 0])
+                return icon_squared
+            # icon landscape mode
+            elif height < width:
+                pad_size = width - height
+                if pad_size % 2 == 0:
+                    # top, bottom, left, right
+                    icon_squared = cv2.copyMakeBorder(_image, pad_size / 2, pad_size / 2, 0, 0, cv2.BORDER_CONSTANT,
+                                                      value=[0, 0, 0])
+                else:
+                    icon_squared = cv2.copyMakeBorder(_image, pad_size / 2 + 1, pad_size / 2, 0, 0, cv2.BORDER_CONSTANT,
+                                                      value=[0, 0, 0])
+                return icon_squared
+            elif height == width:
+                return _image
+
         def _crop_max_square(_image):
+            # crop the biggest square from the center of a image
             h, w, c = _image.shape
             l = min(h, w)
             if (h + l) % 2 != 0:
@@ -129,6 +164,7 @@ class VGG16_Vis_Demo_Model(QObject):
             if self._input_image_names.__contains__(input_image_name):
                 self._input_image_path = os.path.join(input_image_paths[self._model_name], input_image_name)
                 image = caffe.io.load_image(self._input_image_path)
+                image = _square(image)
                 _forward_image(image)
 
     def get_data(self, data_idx):
