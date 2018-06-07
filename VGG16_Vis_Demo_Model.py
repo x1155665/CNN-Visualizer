@@ -13,9 +13,11 @@ model_names = ['icons', 'Simpsons']
 model_folders = {"icons": "./Models/icons", "Simpsons": "./Models/Simpsons"}
 weights_file = {"icons": "./Models/icons/icons_vgg16.caffemodel",
                 "Simpsons": "./Models/Simpsons/Simpsons_vgg16.caffemodel"}
-prototxts = {"icons": "./Models/icons/VGG_ICONS_16_layers_deploy.prototxt", "Simpsons": "./Models/Simpsons/VGG_16_Simpsons_deploy.prototxt"}
+prototxts = {"icons": "./Models/icons/VGG_ICONS_16_layers_deploy.prototxt",
+             "Simpsons": "./Models/Simpsons/VGG_16_Simpsons_deploy.prototxt"}
 label_files = {"icons": "./Models/icons/labels.txt", "Simpsons": "./Models/Simpsons/labels.txt"}
 input_image_paths = {"icons": "./Models/icons/input_images", "Simpsons": "./Models/Simpsons/input_images"}
+deepvis_outputs_paths = {"Simpsons": "../Simpsons_data/deepvis_outputs"}
 
 caffevis_caffe_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(caffe.__file__))))
 
@@ -90,7 +92,7 @@ class VGG16_Vis_Demo_Model(QObject):
         self._net.blobs[self._net.inputs[0]].reshape(*current_input_shape)
         self._net.reshape()
 
-        self._input_image_names = [icon_name for icon_name in os.listdir(input_image_paths[self._model_name]) ]
+        self._input_image_names = [icon_name for icon_name in os.listdir(input_image_paths[self._model_name])]
         self.dataChanged.emit(self.data_idx_input_image_names)
         self._transformer = caffe.io.Transformer({'data': self._net.blobs['data'].data.shape})
         self._transformer.set_transpose('data', (2, 0, 1))  # move image channels to outermost dimension
@@ -105,6 +107,7 @@ class VGG16_Vis_Demo_Model(QObject):
         :param input_image_name: The file name of the local image file
         :param video: set True to use camera s input
         """
+
         def _forward_image(_image):
             input_image = caffe.io.resize(_image, [224, 224], mode='constant', cval=0)
             self._input_image = (input_image * 255).astype(np.uint8)
@@ -196,7 +199,35 @@ class VGG16_Vis_Demo_Model(QObject):
             activation = self._net.blobs[layer_name].data[0][unit_index]
             return activation
 
-    def get_deconv(self, layer_name, unit_index, backprop_mode, ):
+    def get_top_k_images_of_unit(self, layer_name, unit_index, k, get_deconv):
+        if self.online and self._model_name in deepvis_outputs_paths and vgg16_layer_names.__contains__(layer_name) \
+                and unit_index < vgg16_layer_output_sizes[layer_name][len(vgg16_layer_output_sizes[layer_name]) - 1]:
+            unit_dir = os.path.join(deepvis_outputs_paths[self._model_name], layer_name, 'unit_%04d' % unit_index)
+            assert k <= 9
+            if get_deconv:
+                type = 'deconvnorm'
+            else:
+                type = 'maxim'
+            pixmaps = []
+            for i in range(k):
+                file_name = '%s_%03d.png' % (type, i)
+                file_path = os.path.join(unit_dir, file_name)
+                assert os.path.exists(file_path)
+                pixmaps.append(QPixmap(file_path))
+            return pixmaps
+
+    def get_top_1_images_of_layer(self, layer_name):
+        if self.online and self._model_name in deepvis_outputs_paths and vgg16_layer_names.__contains__(layer_name):
+            channel_number = vgg16_layer_output_sizes[layer_name][len(vgg16_layer_output_sizes[layer_name])-1]
+            pixmaps = []
+            for unit_index in range(channel_number):
+                unit_dir = os.path.join(deepvis_outputs_paths[self._model_name], layer_name, 'unit_%04d' % unit_index)
+                file_name = 'maxim_000.png'
+                file_path = os.path.join(unit_dir, file_name)
+                pixmaps.append(QPixmap(file_path))
+            return pixmaps
+
+    def get_deconv(self, layer_name, unit_index, backprop_mode):
         diffs = self._net.blobs[layer_name].diff[0]
         diffs = diffs * 0
         data = self._net.blobs[layer_name].data[0]

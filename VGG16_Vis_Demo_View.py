@@ -156,7 +156,8 @@ class DetailedUnitViewWidget(QLabel):
                 alpha_channel = np.full((self.IMAGE_SIZE.width(), self.IMAGE_SIZE.height()), alpha)
             alpha_channel = np.expand_dims(alpha_channel, 2)
 
-            input_ARGB = np.dstack((alpha_channel, self.input_image))[:, :, (3, 2, 1, 0)]  # dstack will reverse the order
+            input_ARGB = np.dstack((alpha_channel, self.input_image))[:, :,
+                         (3, 2, 1, 0)]  # dstack will reverse the order
             input_ARGB = input_ARGB.astype(np.uint8)
             input_image = QImage(input_ARGB.tobytes(), input_ARGB.shape[0], input_ARGB.shape[1],
                                  input_ARGB.shape[1] * 4, QImage.Format_ARGB32)
@@ -428,15 +429,16 @@ class VGG16_Vis_Demo_View(QMainWindow):
         vbox2.setAlignment(Qt.AlignTop)
 
         # header
-        combo_layer_view = QComboBox(self)
-        combo_layer_view.addItem('Activations')
-        combo_layer_view.addItem('Top 1 images')
+        self.combo_layer_view = QComboBox(self)
+        self.combo_layer_view.addItem('Activations')
+        self.combo_layer_view.addItem('Top 1 images')
+        self.combo_layer_view.currentTextChanged.connect(self.load_layer_view)
         selected_layer_name = ' '
         self.lbl_layer_name = QLabel(
             "of layer <font color='blue'><b>%r</b></font>" % selected_layer_name)  # todo: delete default value
         ckb_group_units = QCheckBox('Group similar units')
         grid_layer_header = QGridLayout()
-        grid_layer_header.addWidget(combo_layer_view, 0, 1)
+        grid_layer_header.addWidget(self.combo_layer_view, 0, 1)
         grid_layer_header.addWidget(self.lbl_layer_name, 0, 2)
         grid_layer_header.addWidget(ckb_group_units, 0, 4)
         vbox2.addLayout(grid_layer_header)
@@ -522,11 +524,13 @@ class VGG16_Vis_Demo_View(QMainWindow):
 
         # top 9 images
         vbox3.addWidget(QLabel("Top 9 images with heighest activations"))
-        combo_top9_images_mode = QComboBox(self)
-        combo_top9_images_mode.addItem("Input")
-        combo_top9_images_mode.addItem("Deconv")
-        vbox3.addWidget(combo_top9_images_mode)
-        grid_top9 = QGridLayout()
+        self.combo_top9_images_mode = QComboBox(self)
+        self.combo_top9_images_mode.addItem("Input")
+        self.combo_top9_images_mode.addItem("Deconv")
+        self.combo_top9_images_mode.currentTextChanged.connect(self.load_top_images)
+        vbox3.addWidget(self.combo_top9_images_mode)
+        self.grid_top9 = QGridLayout()
+        self.last_shown_unit_info = {'model_name':'dummy_model_name', 'layer':'dummy_layer', 'channel':-1}
         pixm_top_image = QPixmap(QSize(224, 224))
         pixm_top_image.fill(Qt.darkGray)
         _top_image_height = 64
@@ -536,8 +540,8 @@ class VGG16_Vis_Demo_View(QMainWindow):
             lbl_top_image = QLabel()
             lbl_top_image.setPixmap(pixm_top_image_scaled)
             lbl_top_image.setFixedSize(QSize(_top_image_height + 4, _top_image_height + 4))
-            grid_top9.addWidget(lbl_top_image, *position)
-        vbox3.addLayout(grid_top9)
+            self.grid_top9.addWidget(lbl_top_image, *position)
+        vbox3.addLayout(self.grid_top9)
 
         # spacer
         vbox3.addSpacing(20)
@@ -616,15 +620,21 @@ class VGG16_Vis_Demo_View(QMainWindow):
 
     def load_layer_view(self):
         if hasattr(self, 'selected_layer_name'):
-
             self.set_busy(True)
             self.lbl_layer_name.setText("of layer <font color='blue'><b>%s</b></font>" % str(self.selected_layer_name))
             start = time.time()
             try:
-                data = self.model.get_activations(self.selected_layer_name)
-                data = self._prepare_data_for_display(data)
-                pximaps = self.get_pixmaps_from_data(data)
-                self.layer_view.set_units(pximaps)
+                pixmaps = []
+                if self.combo_layer_view.currentText() == 'Top 1 images':
+                    if self.last_shown_unit_info['layer'] != self.selected_layer_name \
+                            or self.last_shown_unit_info['model_name'] != self.ctl.model_name:  # load only when changed
+                        pixmaps = self.model.get_top_1_images_of_layer(self.selected_layer_name)
+                else:  # load activations
+                    data = self.model.get_activations(self.selected_layer_name)
+                    data = self._prepare_data_for_display(data)
+                    pixmaps = self.get_pixmaps_from_data(data)
+                if pixmaps and len(pixmaps)!=0:
+                    self.layer_view.set_units(pixmaps)
             except AttributeError, Argument:
                 pass
             self.set_busy(False)
@@ -636,6 +646,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
                 "of unit <font color='blue'><b>%s@%s</b></font>" % (str(unit_index), str(self.selected_layer_name)))
             self.selected_unit_index = unit_index
             self.load_detailed_unit_image()
+            self.load_top_images()
 
     def load_detailed_unit_image(self):
         if hasattr(self, 'selected_layer_name') and hasattr(self, 'selected_unit_index'):
@@ -675,6 +686,27 @@ class VGG16_Vis_Demo_View(QMainWindow):
             data = (data - min) / range * 255  # normalize data for display
         return data
 
+    def load_top_images(self):
+        if hasattr(self, 'selected_layer_name') and hasattr(self, 'selected_unit_index') \
+                and (self.last_shown_unit_info['model_name']!=self.ctl.model_name or
+                     self.last_shown_unit_info['layer'] != self.selected_layer_name or
+                     self.last_shown_unit_info['channel'] != self.selected_unit_index or (self.sender() and self.sender() == self.combo_top9_images_mode)):
+            self.set_busy(True)
+            pixmaps = self.model.get_top_k_images_of_unit(self.selected_layer_name, self.selected_unit_index, 9,
+                                                          (self.combo_top9_images_mode.currentText() == 'Deconv'))
+            if pixmaps:
+                for i in range(len(pixmaps)):
+                    lbl_top_image = self.grid_top9.itemAt(i).widget()
+                    pixmap = pixmaps[i].scaledToHeight(lbl_top_image.height())
+                    lbl_top_image.setPixmap(pixmap)
+            else:
+                pass  # in case deepvis output dose not exist
+
+            self.last_shown_unit_info['model_name'] = self.ctl.model_name
+            self.last_shown_unit_info['layer'] = self.selected_layer_name
+            self.last_shown_unit_info['channel'] = self.selected_unit_index
+            self.set_busy(False)
+
     # if the data has colors, argument 'data' is a 4D (conv_layer) or 3D (fc_layer) array,
     # else the 'data' is a 3D (conv_layer) or 2D (fc_layer) array.
     # The first axis is the unit index
@@ -708,7 +740,8 @@ class VGG16_Vis_Demo_View(QMainWindow):
         input_data = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_input_image)
         if input_data.dtype != np.uint8:
             input_data = input_data.astype(np.uint8)
-        image = QImage(input_data.tobytes(), input_data.shape[0], input_data.shape[1], input_data.shape[1] * 3, QImage.Format_RGB888)
+        image = QImage(input_data.tobytes(), input_data.shape[0], input_data.shape[1], input_data.shape[1] * 3,
+                       QImage.Format_RGB888)
         self.lbl_input_image.setPixmap(QPixmap.fromImage(image))
 
         # get probs
