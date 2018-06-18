@@ -121,6 +121,9 @@ class DetailedUnitViewWidget(QLabel):
         self.setPixmap(pixmap)
 
     def set_overlay_view(self, mode=OverlayOptions.No_OVERLAY.value):
+        def Sigmoid(x):
+            return np.divide(1 , (1 + np.exp(-x)));
+
         self.overlay_mode = mode
         if not hasattr(self, 'activation') or self.working_mode != self.WorkingMode.ACTIVATION.value:
             return
@@ -140,10 +143,12 @@ class DetailedUnitViewWidget(QLabel):
 
             # use sigmoid function to add non-linearity near border
             border = 32
-            delta = 6.3  # delta=(255-border)/stretch_factor=(0-border)/stretch_factor
-            stretch_factor = border / delta + (255 - 2 * border) / delta / 255 * data  # linear function
+            delta = 4  # delta=(255-border)/stretch_factor=(0-border)/stretch_factor
+            stretch_factor = border / delta + np.multiply(data, ((255.0 - 2.0 * border) / delta / 255.0))  # linear function
+            sig_range = Sigmoid(delta) - Sigmoid(-delta)
+            sig_min = Sigmoid(-delta)
             data_norm = np.divide(data - border, stretch_factor)
-            alpha = 255 / (1 + np.exp(-data_norm))
+            alpha = 255 * (Sigmoid(data_norm)-sig_min)/sig_range
 
             if mode == self.OverlayOptions.OVER_INACTIVE.value or mode == self.OverlayOptions.ONLY_INACTIVE.value:
                 alpha = 255 - alpha
@@ -185,7 +190,7 @@ class SmallUnitViewWidget(QLabel):
     def mousePressEvent(self, QMouseEvent):
         self.clicked.emit()
 
-
+from PIL import Image
 # double-clickable QLabel
 class DoubleClickableQLabel(QLabel):
     def __init__(self):
@@ -330,7 +335,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
         self.model.dataChanged[int].connect(self.update_data)
         self.ctl.isBusy[bool].connect(self.set_busy)
         self.initUI()
-        self.ctl.start(priority=QThread.LowestPriority)
+        self.ctl.start(priority=QThread.NormalPriority)
 
     def initUI(self):
         # region vbox1
@@ -436,11 +441,11 @@ class VGG16_Vis_Demo_View(QMainWindow):
         selected_layer_name = ' '
         self.lbl_layer_name = QLabel(
             "of layer <font color='blue'><b>%r</b></font>" % selected_layer_name)  # todo: delete default value
-        ckb_group_units = QCheckBox('Group similar units')
+        # ckb_group_units = QCheckBox('Group similar units')
         grid_layer_header = QGridLayout()
         grid_layer_header.addWidget(self.combo_layer_view, 0, 1)
         grid_layer_header.addWidget(self.lbl_layer_name, 0, 2)
-        grid_layer_header.addWidget(ckb_group_units, 0, 4)
+        # grid_layer_header.addWidget(ckb_group_units, 0, 4)
         vbox2.addLayout(grid_layer_header)
 
         # layer (units) view
@@ -523,7 +528,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
         vbox3.addSpacing(20)
 
         # top 9 images
-        vbox3.addWidget(QLabel("Top 9 images with heighest activations"))
+        vbox3.addWidget(QLabel("Top 9 images with highest activations"))
         self.combo_top9_images_mode = QComboBox(self)
         self.combo_top9_images_mode.addItem("Input")
         self.combo_top9_images_mode.addItem("Deconv")
@@ -544,17 +549,17 @@ class VGG16_Vis_Demo_View(QMainWindow):
         vbox3.addLayout(self.grid_top9)
 
         # spacer
-        vbox3.addSpacing(20)
-        frm_line_top9_gd = QFrame()
-        frm_line_top9_gd.setFrameShape(QFrame.HLine)
-        frm_line_top9_gd.setFrameShadow(QFrame.Sunken)
-        frm_line_top9_gd.setLineWidth(1)
-        vbox3.addWidget(frm_line_top9_gd)
-        vbox3.addSpacing(20)
+        # vbox3.addSpacing(20)
+        # frm_line_top9_gd = QFrame()
+        # frm_line_top9_gd.setFrameShape(QFrame.HLine)
+        # frm_line_top9_gd.setFrameShadow(QFrame.Sunken)
+        # frm_line_top9_gd.setLineWidth(1)
+        # vbox3.addWidget(frm_line_top9_gd)
+        # vbox3.addSpacing(20)
 
         # gradient ascent
-        btn_gradient_ascent = QPushButton("Find out what was learnt in this unit")
-        vbox3.addWidget(btn_gradient_ascent)
+        # btn_gradient_ascent = QPushButton("Find out what was learnt in this unit")
+        # vbox3.addWidget(btn_gradient_ascent)
 
         # endregion
 
@@ -591,7 +596,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
         self.setCentralWidget(central_widget)
         self.setWindowTitle('VGG16 Visualizer')
         self.center()
-        self.show()
+        self.showMaximized()
 
     def center(self):
         qr = self.frameGeometry()
@@ -627,7 +632,8 @@ class VGG16_Vis_Demo_View(QMainWindow):
                 pixmaps = []
                 if self.combo_layer_view.currentText() == 'Top 1 images':
                     if self.last_shown_unit_info['layer'] != self.selected_layer_name \
-                            or self.last_shown_unit_info['model_name'] != self.ctl.model_name:  # load only when changed
+                            or self.last_shown_unit_info['model_name'] != self.ctl.model_name \
+                            or (self.sender() and self.sender() == self.combo_layer_view):  # load only when changed
                         pixmaps = self.model.get_top_1_images_of_layer(self.selected_layer_name)
                 else:  # load activations
                     data = self.model.get_activations(self.selected_layer_name)

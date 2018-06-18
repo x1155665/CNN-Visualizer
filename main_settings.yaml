@@ -1,0 +1,13 @@
+
+Use_GPU: true
+GPU_ID: 0
+
+caffevis_caffe_root: "/home/ruizhang/py/deep-visualization-toolbox/caffe/"
+
+# Paths to the yaml setting file of the models
+# example:
+# model_A : /path/to/the/setting/file/of/model_A
+Model_config_path:
+  Icons: "./model_icons_settings.yaml"
+  Simpsons: "./model_simpsons_settings.yaml"
+  Pokemon: "./model_pokemon_settings.yaml"

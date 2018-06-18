@@ -1,23 +1,25 @@
-import caffe
 import numpy as np
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtGui import QPixmap
 import os
 import cv2
 import matplotlib.pyplot as plt
 from enum import Enum
-from multiprocessing import Process, Queue, Manager
 import time
+from Settings import Settings
+import caffe
 
-model_names = ['icons', 'Simpsons']
-model_folders = {"icons": "./Models/icons", "Simpsons": "./Models/Simpsons"}
-weights_file = {"icons": "./Models/icons/icons_vgg16.caffemodel",
-                "Simpsons": "./Models/Simpsons/Simpsons_vgg16.caffemodel"}
-prototxts = {"icons": "./Models/icons/VGG_ICONS_16_layers_deploy.prototxt",
-             "Simpsons": "./Models/Simpsons/VGG_16_Simpsons_deploy.prototxt"}
-label_files = {"icons": "./Models/icons/labels.txt", "Simpsons": "./Models/Simpsons/labels.txt"}
-input_image_paths = {"icons": "./Models/icons/input_images", "Simpsons": "./Models/Simpsons/input_images"}
-deepvis_outputs_paths = {"Simpsons": "../Simpsons_data/deepvis_outputs"}
+# # todo: read settings from setting files
+# model_names = ['icons', 'Simpsons','Pokemons']
+# weights_file = {"icons": "./Models/icons/icons_vgg16.caffemodel",
+#                 "Simpsons": "./Models/Simpsons/Simpsons_vgg16.caffemodel",
+#                 "Pokemons": "./Models/Pokemons/Pokemons_vgg16.caffemodel"}
+# prototxts = {"icons": "./Models/icons/VGG_ICONS_16_layers_deploy.prototxt",
+#              "Simpsons": "./Models/Simpsons/VGG_16_Simpsons_deploy.prototxt",
+#              "Pokemons": "./Models/Pokemons/VGG_16_Pokemons_deploy.prototxt"}
+# label_files = {"icons": "./Models/icons/labels.txt", "Simpsons": "./Models/Simpsons/labels.txt", "Pokemons": "./Models/Pokemons/Labels.txt"}
+# input_image_paths = {"icons": "./Models/icons/input_images", "Simpsons": "./Models/Simpsons/input_images", "Pokemons": "./Models/Pokemons/GroundtruthData"}
+# deepvis_outputs_paths = {"Simpsons": "../Simpsons_data/deepvis_outputs"}
 
 caffevis_caffe_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(caffe.__file__))))
 
@@ -43,7 +45,6 @@ mean = np.array([103.939, 116.779, 123.68])
 
 
 class VGG16_Vis_Demo_Model(QObject):
-    dataChanged = pyqtSignal(int)
 
     data_idx_model_names = 0
     data_idx_layer_names = 1
@@ -56,6 +57,10 @@ class VGG16_Vis_Demo_Model(QObject):
     data_idx_new_input = 128
     data_idx_input_image_path = 8
 
+    dataChanged = pyqtSignal(int)
+
+    settings = None
+
     class BackpropModeOption(Enum):
         GRADIENT = 'Gradient'
         ZF = 'ZF Deconv'
@@ -63,8 +68,15 @@ class VGG16_Vis_Demo_Model(QObject):
 
     def __init__(self):
         super(QObject, self).__init__()
-        # caffe.set_device(0)
-        caffe.set_mode_gpu()
+        self.settings = Settings()
+        if self.settings.use_GPU:
+            caffe.set_mode_gpu()
+            caffe.set_device(self.settings.gpu_id)
+            print 'Loaded caffe in GPU mode, using device', self.settings.gpu_id
+        else:
+            caffe.set_mode_cpu()
+            print 'Loaded caffe in CPU mode'
+
         self.cap = cv2.VideoCapture(0)
 
         # setting frame size not working properly
@@ -74,25 +86,26 @@ class VGG16_Vis_Demo_Model(QObject):
         self.online = False
 
     def set_model(self, model_name):
-        if model_names.__contains__(model_name):
+        if self.settings.model_names.__contains__(model_name):
+            self.settings.load_settings(model_name)
             self.load_net(model_name)
 
     def load_net(self, model_name):
         self._model_name = model_name
-        self._model_def = prototxts[model_name]
-        self._model_weights = weights_file[model_name]
-        self._labels = np.loadtxt(label_files[model_name], str, delimiter='\n')
+        self._model_def = self.settings.prototxt
+        self._model_weights = self.settings.network_weights
+        self._labels = np.loadtxt(self.settings.label_file, str, delimiter='\n')
 
         processed_prototxt = self._process_network_proto(self._model_def)
         self._net = caffe.Classifier(processed_prototxt, self._model_weights, mean=mean, raw_scale=255.0,
-                                     channel_swap=(0, 1, 2))
+                                     channel_swap=self.settings.channel_swap)
         # self._net.transformer.set_mean(self._net.inputs[0], mean)
         current_input_shape = self._net.blobs[self._net.inputs[0]].shape
         current_input_shape[0] = 1
         self._net.blobs[self._net.inputs[0]].reshape(*current_input_shape)
         self._net.reshape()
 
-        self._input_image_names = [icon_name for icon_name in os.listdir(input_image_paths[self._model_name])]
+        self._input_image_names = [icon_name for icon_name in os.listdir(self.settings.input_image_path)]
         self.dataChanged.emit(self.data_idx_input_image_names)
         self._transformer = caffe.io.Transformer({'data': self._net.blobs['data'].data.shape})
         self._transformer.set_transpose('data', (2, 0, 1))  # move image channels to outermost dimension
@@ -165,14 +178,15 @@ class VGG16_Vis_Demo_Model(QObject):
             _forward_image(cv2.flip(squared_image[:, :, (2, 1, 0)], 1))
         else:
             if self._input_image_names.__contains__(input_image_name):
-                self._input_image_path = os.path.join(input_image_paths[self._model_name], input_image_name)
+                self._input_image_path = os.path.join(self.settings.input_image_path, input_image_name)
                 image = caffe.io.load_image(self._input_image_path)
                 image = _square(image)
                 _forward_image(image)
 
+    # todo: remove get_data
     def get_data(self, data_idx):
         if data_idx == self.data_idx_model_names:
-            return model_names
+            return self.settings.model_names
         elif data_idx == self.data_idx_layer_names:
             return vgg16_layer_names
         elif data_idx == self.data_idx_layer_output_sizes:
@@ -200,9 +214,9 @@ class VGG16_Vis_Demo_Model(QObject):
             return activation
 
     def get_top_k_images_of_unit(self, layer_name, unit_index, k, get_deconv):
-        if self.online and self._model_name in deepvis_outputs_paths and vgg16_layer_names.__contains__(layer_name) \
+        if self.online and self.settings.deepvis_outputs_path and vgg16_layer_names.__contains__(layer_name) \
                 and unit_index < vgg16_layer_output_sizes[layer_name][len(vgg16_layer_output_sizes[layer_name]) - 1]:
-            unit_dir = os.path.join(deepvis_outputs_paths[self._model_name], layer_name, 'unit_%04d' % unit_index)
+            unit_dir = os.path.join(self.settings.deepvis_outputs_path, layer_name, 'unit_%04d' % unit_index)
             assert k <= 9
             if get_deconv:
                 type = 'deconvnorm'
@@ -217,11 +231,11 @@ class VGG16_Vis_Demo_Model(QObject):
             return pixmaps
 
     def get_top_1_images_of_layer(self, layer_name):
-        if self.online and self._model_name in deepvis_outputs_paths and vgg16_layer_names.__contains__(layer_name):
+        if self.online and self.settings.deepvis_outputs_path and vgg16_layer_names.__contains__(layer_name):
             channel_number = vgg16_layer_output_sizes[layer_name][len(vgg16_layer_output_sizes[layer_name])-1]
             pixmaps = []
             for unit_index in range(channel_number):
-                unit_dir = os.path.join(deepvis_outputs_paths[self._model_name], layer_name, 'unit_%04d' % unit_index)
+                unit_dir = os.path.join(self.settings.deepvis_outputs_path, layer_name, 'unit_%04d' % unit_index)
                 file_name = 'maxim_000.png'
                 file_path = os.path.join(unit_dir, file_name)
                 pixmaps.append(QPixmap(file_path))
