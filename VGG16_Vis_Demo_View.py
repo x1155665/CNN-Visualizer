@@ -226,9 +226,11 @@ class LayerViewWidget(QScrollArea):
         self.grid.setHorizontalSpacing(0)
         self.grid.setSpacing(0)
         self.grid.setContentsMargins(QMargins(0, 0, 0, 0))
-        self.allocate_units(units)
 
     def allocate_units(self, units):
+        if not units or len(units)==0:
+            return
+
         N = len(units)
         oroginal_unit_width = units[0].width()
         H = self.height()
@@ -284,7 +286,7 @@ class LayerViewWidget(QScrollArea):
         self.allocate_units(self.units)
 
     def set_units(self, units):
-        last_units_number = len(self.units)
+        last_units_number = len(self.units) if self.units else 0
         self.units = units
         if last_units_number == len(units):
             # if the arrangement will not be changed, simply update pixmaps to speed up loading
@@ -386,35 +388,14 @@ class VGG16_Vis_Demo_View(QMainWindow):
         vbox1.addWidget(lbl_arrow_input_to_vgg16)
 
         # Network overview
-        gb_network = QGroupBox("VGG16")
-        vbox_network = QVBoxLayout()
-        vbox_network.setAlignment(Qt.AlignCenter)
-        vgg16_layer_names = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_layer_names)
-        vgg16_layer_output_sizes = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_layer_output_sizes)
-        # todo: change the style of layers
-        for layer_name in vgg16_layer_names:
-            btn_layer = QRadioButton(layer_name)
-            btn_layer.setFont(QFont('Times', 11, QFont.Bold))
-            btn_layer.toggled.connect(self.select_layer_action)
-            vbox_network.addWidget(btn_layer)
-            size = vgg16_layer_output_sizes[layer_name]
-            size_string = ''
-            for value in size:
-                size_string += str(value)
-                size_string += '×'
-            size_string = size_string[:len(size_string) - len('×')]
-            lbl_arrow = QLabel(' ⬇️ ' + size_string)
-            lbl_arrow.setFont(QFont("Helvetica", 8))
-            vbox_network.addWidget(lbl_arrow)
-        wrapper_vbox_network = QWidget()
-        wrapper_vbox_network.setLayout(vbox_network)
-        scroll_network = QScrollArea()
-        scroll_network.setFrameShape(QFrame.Box)
-        scroll_network.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_network.setWidget(wrapper_vbox_network)
-        scroll_network.setAlignment(Qt.AlignCenter)
+        gb_network = QGroupBox("Neural network")
+        self.scroll_network = QScrollArea()
+        self.scroll_network.setFrameShape(QFrame.Box)
+        self.scroll_network.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroll_network.setAlignment(Qt.AlignCenter)
+        self.draw_network_overview()
         layout_scroll_network = QVBoxLayout()
-        layout_scroll_network.addWidget(scroll_network)
+        layout_scroll_network.addWidget(self.scroll_network)
         gb_network.setLayout(layout_scroll_network)
         vbox1.addWidget(gb_network)
 
@@ -449,12 +430,7 @@ class VGG16_Vis_Demo_View(QMainWindow):
         vbox2.addLayout(grid_layer_header)
 
         # layer (units) view
-        dummy_units = []
-        for i in range(128):
-            dummy_pxim_unit = QPixmap(QSize(112, 112))
-            dummy_pxim_unit.fill(Qt.darkGreen)
-            dummy_units.append(dummy_pxim_unit)
-        self.layer_view = LayerViewWidget(dummy_units)
+        self.layer_view = LayerViewWidget(None)
         self.layer_view.clicked_unit_changed.connect(self.select_unit_action)
         vbox2.addWidget(self.layer_view)
         # endregion
@@ -604,9 +580,14 @@ class VGG16_Vis_Demo_View(QMainWindow):
         qr.moveCenter(cp)
         self.move(qr.topLeft())
 
+    def closeEvent(self, QCloseEvent):
+        self.ctl.quit()  # stop the controller thread
+
     def update_data(self, data_idx):
         if data_idx == VGG16_Vis_Demo_Model.data_idx_input_image_names:
             self.update_combobox_input_image()
+        elif data_idx == VGG16_Vis_Demo_Model.data_idx_layer_names:
+            self.draw_network_overview()
         elif data_idx == VGG16_Vis_Demo_Model.data_idx_new_input:
             self.refresh()
 
@@ -627,7 +608,6 @@ class VGG16_Vis_Demo_View(QMainWindow):
         if hasattr(self, 'selected_layer_name'):
             self.set_busy(True)
             self.lbl_layer_name.setText("of layer <font color='blue'><b>%s</b></font>" % str(self.selected_layer_name))
-            start = time.time()
             try:
                 pixmaps = []
                 if self.combo_layer_view.currentText() == 'Top 1 images':
@@ -644,7 +624,6 @@ class VGG16_Vis_Demo_View(QMainWindow):
             except AttributeError, Argument:
                 pass
             self.set_busy(False)
-            print("load layer time: " + str(time.time() - start))
 
     def select_unit_action(self, unit_index):
         if hasattr(self, 'selected_layer_name'):
@@ -763,6 +742,35 @@ class VGG16_Vis_Demo_View(QMainWindow):
 
     def switch_backprop_view_action(self, mode):
         self.detailed_unit_view.set_backprop_view(mode)
+
+    def draw_network_overview(self):
+        # delecte the current widget
+        if self.scroll_network.widget():
+            self.scroll_network.widget().deleteLater()
+        # draw new layout
+        vbox_network = QVBoxLayout()
+        vbox_network.setAlignment(Qt.AlignCenter)
+        layer_names = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_layer_names)
+        layer_output_sizes = self.model.get_data(VGG16_Vis_Demo_Model.data_idx_layer_output_sizes)
+        # todo: change the style of layers
+        for layer_name in layer_names:
+            btn_layer = QRadioButton(layer_name)
+            btn_layer.setFont(QFont('Times', 11, QFont.Bold))
+            btn_layer.toggled.connect(self.select_layer_action)
+            vbox_network.addWidget(btn_layer)
+            size = layer_output_sizes[layer_name]
+            size_string = ''
+            for value in size:
+                size_string += str(value)
+                size_string += '×'
+            size_string = size_string[:len(size_string) - len('×')]
+            lbl_arrow = QLabel(' ⬇️ ' + size_string)
+            lbl_arrow.setFont(QFont("Helvetica", 8))
+            vbox_network.addWidget(lbl_arrow)
+        wrapper_vbox_network = QWidget()
+        wrapper_vbox_network.setLayout(vbox_network)
+        self.scroll_network.setWidget(wrapper_vbox_network)
+        pass
 
     def set_busy(self, isBusy):
         previous_busy_count = self._busy

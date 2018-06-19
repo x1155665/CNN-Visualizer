@@ -11,29 +11,8 @@ import caffe
 
 caffevis_caffe_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(caffe.__file__))))
 
-# todo: read layer info from net
-vgg16_layer_names = ['conv1_1', 'conv1_2', 'pool1',
-                     'conv2_1', 'conv2_2', 'pool2', 'conv3_1',
-                     'conv3_2', 'conv3_3', 'pool3', 'conv4_1',
-                     'conv4_2', 'conv4_3', 'pool4', 'conv5_1',
-                     'conv5_2', 'conv5_3', 'pool5', 'fc6',
-                     'fc7', 'fc8']
-vgg16_layer_output_sizes = {'conv1_1': (224, 224, 64), 'conv1_2': (224, 224, 64),
-                            'pool1': (112, 112, 64),
-                            'conv2_1': (112, 112, 128), 'conv2_2': (112, 112, 128), 'pool2': (56, 56, 128),
-                            'conv3_1': (56, 56, 256), 'conv3_2': (56, 56, 256), 'conv3_3': (56, 56, 256),
-                            'pool3': (28, 28, 256),
-                            'conv4_1': (28, 28, 512), 'conv4_2': (28, 28, 512), 'conv4_3': (28, 28, 512),
-                            'pool4': (14, 14, 512),
-                            'conv5_1': (14, 14, 512), 'conv5_2': (14, 14, 512,), 'conv5_3': (14, 14, 512),
-                            'pool5': (7, 7, 512),
-                            'fc6': [4096], 'fc7': [4096], 'fc8': [16]}
-
-mean = np.array([103.939, 116.779, 123.68])
-
 
 class VGG16_Vis_Demo_Model(QObject):
-
     data_idx_model_names = 0
     data_idx_layer_names = 1
     data_idx_layer_output_sizes = 2
@@ -66,7 +45,8 @@ class VGG16_Vis_Demo_Model(QObject):
             print 'Loaded caffe in CPU mode'
 
         self.cap = cv2.VideoCapture(0)
-
+        self._layer_list = []
+        self._layer_output_sizes = {}
         # setting frame size not working properly
         # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 224)
         # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 224)
@@ -85,19 +65,21 @@ class VGG16_Vis_Demo_Model(QObject):
         self._labels = np.loadtxt(self.settings.label_file, str, delimiter='\n')
 
         processed_prototxt = self._process_network_proto(self._model_def)
-        self._net = caffe.Classifier(processed_prototxt, self._model_weights, mean=mean, raw_scale=255.0,
+        self._net = caffe.Classifier(processed_prototxt, self._model_weights, mean=self.settings.mean, raw_scale=255.0,
                                      channel_swap=self.settings.channel_swap)
         # self._net.transformer.set_mean(self._net.inputs[0], mean)
         current_input_shape = self._net.blobs[self._net.inputs[0]].shape
         current_input_shape[0] = 1
         self._net.blobs[self._net.inputs[0]].reshape(*current_input_shape)
         self._net.reshape()
+        self._get_layers_info()
+        self.dataChanged.emit(self.data_idx_layer_names)
 
         self._input_image_names = [icon_name for icon_name in os.listdir(self.settings.input_image_path)]
         self.dataChanged.emit(self.data_idx_input_image_names)
         self._transformer = caffe.io.Transformer({'data': self._net.blobs['data'].data.shape})
         self._transformer.set_transpose('data', (2, 0, 1))  # move image channels to outermost dimension
-        self._transformer.set_mean('data', mean)  # subtract the dataset-mean value in each channel
+        self._transformer.set_mean('data', self.settings.mean)  # subtract the dataset-mean value in each channel
         self._transformer.set_raw_scale('data', 255)  # rescale from [0, 1] to [0, 255]
 
     def set_input_and_forward(self, input_image_name, video=False):
@@ -171,14 +153,13 @@ class VGG16_Vis_Demo_Model(QObject):
                 image = _square(image)
                 _forward_image(image)
 
-    # todo: remove get_data
     def get_data(self, data_idx):
         if data_idx == self.data_idx_model_names:
             return self.settings.model_names
         elif data_idx == self.data_idx_layer_names:
-            return vgg16_layer_names
+            return self._layer_list
         elif data_idx == self.data_idx_layer_output_sizes:
-            return vgg16_layer_output_sizes
+            return self._layer_output_sizes
         elif data_idx == self.data_idx_probs:
             return self._net.blobs['prob'].data.flatten()
         elif data_idx == self.data_idx_input_image_names:
@@ -191,19 +172,19 @@ class VGG16_Vis_Demo_Model(QObject):
             return self._input_image
 
     def get_activations(self, layer_name):
-        if self.online and vgg16_layer_names.__contains__(layer_name):
+        if self.online and self._layer_list.__contains__(layer_name):
             activations = self._net.blobs[layer_name].data[0]
             return activations
 
     def get_activation(self, layer_name, unit_index):
-        if self.online and vgg16_layer_names.__contains__(layer_name) and unit_index < \
-                vgg16_layer_output_sizes[layer_name][len(vgg16_layer_output_sizes[layer_name]) - 1]:
+        if self.online and self._layer_list.__contains__(layer_name) and unit_index < \
+                self._layer_output_sizes[layer_name][0]:
             activation = self._net.blobs[layer_name].data[0][unit_index]
             return activation
 
     def get_top_k_images_of_unit(self, layer_name, unit_index, k, get_deconv):
-        if self.online and self.settings.deepvis_outputs_path and vgg16_layer_names.__contains__(layer_name) \
-                and unit_index < vgg16_layer_output_sizes[layer_name][len(vgg16_layer_output_sizes[layer_name]) - 1]:
+        if self.online and self.settings.deepvis_outputs_path and self._layer_list.__contains__(layer_name) \
+                and unit_index < self._layer_output_sizes[layer_name][0]:
             unit_dir = os.path.join(self.settings.deepvis_outputs_path, layer_name, 'unit_%04d' % unit_index)
             assert k <= 9
             if get_deconv:
@@ -214,13 +195,15 @@ class VGG16_Vis_Demo_Model(QObject):
             for i in range(k):
                 file_name = '%s_%03d.png' % (type, i)
                 file_path = os.path.join(unit_dir, file_name)
-                assert os.path.exists(file_path)
-                pixmaps.append(QPixmap(file_path))
+                if os.path.exists(file_path):
+                    pixmaps.append(QPixmap(file_path))
+                else:
+                    print file_path + " not exits."
             return pixmaps
 
     def get_top_1_images_of_layer(self, layer_name):
-        if self.online and self.settings.deepvis_outputs_path and vgg16_layer_names.__contains__(layer_name):
-            channel_number = vgg16_layer_output_sizes[layer_name][len(vgg16_layer_output_sizes[layer_name])-1]
+        if self.online and self.settings.deepvis_outputs_path and self._layer_list.__contains__(layer_name):
+            channel_number = self._layer_output_sizes[layer_name][0]
             pixmaps = []
             for unit_index in range(channel_number):
                 unit_dir = os.path.join(self.settings.deepvis_outputs_path, layer_name, 'unit_%04d' % unit_index)
@@ -287,3 +270,24 @@ class VGG16_Vis_Demo_Model(QObject):
             self.cap.open(0)
         else:
             self.cap.release()
+
+    def _get_layers_info(self):
+        self._layer_list = []
+        self._layer_output_sizes = {}
+        # go over layers
+        total_layer_number = len(list(self._net._layer_names))
+        idx = 0
+        for layer_name in list(self._net._layer_names):
+            idx += 1
+            # skip input, output and inplace layers. eg. relu
+            if idx == 1 or idx == total_layer_number or (
+                    len(self._net.top_names[layer_name]) == 1 and len(self._net.bottom_names[layer_name]) == 1 and
+                    self._net.top_names[layer_name][0] == self._net.bottom_names[layer_name][0]):
+                continue
+
+            self._layer_list.append(layer_name)
+
+            # get output size
+            top_shape = self._net.blobs[layer_name].data[0].shape
+
+            self._layer_output_sizes.update({layer_name: top_shape})
