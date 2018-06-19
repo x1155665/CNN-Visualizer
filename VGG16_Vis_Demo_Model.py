@@ -9,18 +9,6 @@ import time
 from Settings import Settings
 import caffe
 
-# # todo: read settings from setting files
-# model_names = ['icons', 'Simpsons','Pokemons']
-# weights_file = {"icons": "./Models/icons/icons_vgg16.caffemodel",
-#                 "Simpsons": "./Models/Simpsons/Simpsons_vgg16.caffemodel",
-#                 "Pokemons": "./Models/Pokemons/Pokemons_vgg16.caffemodel"}
-# prototxts = {"icons": "./Models/icons/VGG_ICONS_16_layers_deploy.prototxt",
-#              "Simpsons": "./Models/Simpsons/VGG_16_Simpsons_deploy.prototxt",
-#              "Pokemons": "./Models/Pokemons/VGG_16_Pokemons_deploy.prototxt"}
-# label_files = {"icons": "./Models/icons/labels.txt", "Simpsons": "./Models/Simpsons/labels.txt", "Pokemons": "./Models/Pokemons/Labels.txt"}
-# input_image_paths = {"icons": "./Models/icons/input_images", "Simpsons": "./Models/Simpsons/input_images", "Pokemons": "./Models/Pokemons/GroundtruthData"}
-# deepvis_outputs_paths = {"Simpsons": "../Simpsons_data/deepvis_outputs"}
-
 caffevis_caffe_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(caffe.__file__))))
 
 # todo: read layer info from net
