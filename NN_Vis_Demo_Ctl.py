@@ -1,13 +1,9 @@
-import numpy as np
 from PyQt5.QtCore import Qt, pyqtSignal, QThread
-import os
-from VGG16_Vis_Demo_Model import VGG16_Vis_Demo_Model
 import time
-from multiprocessing import Process
 import caffe
 
 
-class VGG16_Vis_Demo_Ctl(QThread):
+class NN_Vis_Demo_Ctl(QThread):
     isBusy = pyqtSignal(bool)
 
     def __init__(self, model):

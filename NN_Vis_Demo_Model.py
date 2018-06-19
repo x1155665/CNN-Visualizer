@@ -12,7 +12,7 @@ import caffe
 caffevis_caffe_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(caffe.__file__))))
 
 
-class VGG16_Vis_Demo_Model(QObject):
+class NN_Vis_Demo_Model(QObject):
     data_idx_model_names = 0
     data_idx_layer_names = 1
     data_idx_layer_output_sizes = 2
