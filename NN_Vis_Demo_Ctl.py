@@ -13,7 +13,7 @@ class NN_Vis_Demo_Ctl(QThread):
         self.FLAG_set_input = False
         self.model_name = ''
         self.input_image_name = ''
-        self.start_time = 0
+        # self.start_time = 0
         self.FLAG_video = False
         self.new_source = False  # True for Video; False for Image
 
@@ -62,8 +62,8 @@ class NN_Vis_Demo_Ctl(QThread):
 
     def _set_input_image(self, image_name, video=False):
         self.FLAG_set_input = False
-        print(time.time() - self.start_time)
-        self.start_time = time.time()
+        # print(time.time() - self.start_time)
+        # self.start_time = time.time()
         self.isBusy.emit(True)
         self.model.set_input_and_forward(image_name, video)
         self.isBusy.emit(False)

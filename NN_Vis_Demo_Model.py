@@ -1,17 +1,18 @@
 import numpy as np
 from PyQt5.QtCore import Qt, pyqtSignal, QObject
 from PyQt5.QtGui import QPixmap
-import os
+import os, sys
 import cv2
 import matplotlib.pyplot as plt
 from enum import Enum
 import time
 from Settings import Settings
-import caffe
 
+import caffe
 caffevis_caffe_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(caffe.__file__))))
 
 
+# todo: get data, input and output layer names from prototxt
 class NN_Vis_Demo_Model(QObject):
     data_idx_model_names = 0
     data_idx_layer_names = 1
@@ -36,6 +37,7 @@ class NN_Vis_Demo_Model(QObject):
     def __init__(self):
         super(QObject, self).__init__()
         self.settings = Settings()
+
         if self.settings.use_GPU:
             caffe.set_mode_gpu()
             caffe.set_device(self.settings.gpu_id)
@@ -44,7 +46,8 @@ class NN_Vis_Demo_Model(QObject):
             caffe.set_mode_cpu()
             print 'Loaded caffe in CPU mode'
 
-        self.cap = cv2.VideoCapture(0)
+        self.camera_id = self.settings.camera_id
+        self.cap = cv2.VideoCapture(self.camera_id)
         self._layer_list = []
         self._layer_output_sizes = {}
         # setting frame size not working properly
@@ -56,6 +59,7 @@ class NN_Vis_Demo_Model(QObject):
     def set_model(self, model_name):
         if self.settings.model_names.__contains__(model_name):
             self.settings.load_settings(model_name)
+            self.online = False
             self.load_net(model_name)
 
     def load_net(self, model_name):
@@ -75,12 +79,13 @@ class NN_Vis_Demo_Model(QObject):
         self._get_layers_info()
         self.dataChanged.emit(self.data_idx_layer_names)
 
-        self._input_image_names = [icon_name for icon_name in os.listdir(self.settings.input_image_path)]
+        self._input_image_names = [image_name for image_name in os.listdir(self.settings.input_image_path)]
         self.dataChanged.emit(self.data_idx_input_image_names)
-        self._transformer = caffe.io.Transformer({'data': self._net.blobs['data'].data.shape})
-        self._transformer.set_transpose('data', (2, 0, 1))  # move image channels to outermost dimension
-        self._transformer.set_mean('data', self.settings.mean)  # subtract the dataset-mean value in each channel
-        self._transformer.set_raw_scale('data', 255)  # rescale from [0, 1] to [0, 255]
+        self._transformer = caffe.io.Transformer({self._data_blob_name: self._net.blobs[self._data_blob_name].data.shape})
+        self._transformer.set_transpose(self._data_blob_name, (2, 0, 1))  # move image channels to outermost dimension
+        self._transformer.set_mean(self._data_blob_name, self.settings.mean)  # subtract the dataset-mean value in each channel
+        self._transformer.set_raw_scale(self._data_blob_name, 255)  # rescale from [0, 1] to [0, 255]
+        self._transformer.set_channel_swap(self._data_blob_name, self.settings.channel_swap)
 
     def set_input_and_forward(self, input_image_name, video=False):
         """
@@ -92,13 +97,11 @@ class NN_Vis_Demo_Model(QObject):
         """
 
         def _forward_image(_image):
-            input_image = caffe.io.resize(_image, [224, 224], mode='constant', cval=0)
+            input_image = caffe.io.resize(_image, self._input_dims, mode='constant', cval=0)
             self._input_image = (input_image * 255).astype(np.uint8)
-            transformed_image = self._transformer.preprocess('data', input_image)
-            self._net.blobs['data'].data[...] = transformed_image
-            start = time.time()
+            transformed_image = self._transformer.preprocess(self._data_blob_name, input_image)
+            self._net.blobs[self._data_blob_name].data[...] = transformed_image
             self._net.forward()
-            print('forward time: ' + str(time.time() - start))
             self.online = True
             self.dataChanged.emit(self.data_idx_new_input)
 
@@ -145,11 +148,11 @@ class NN_Vis_Demo_Model(QObject):
         if video:
             ret, frame = self.cap.read()
             squared_image = _crop_max_square(frame)
-            _forward_image(cv2.flip(squared_image[:, :, (2, 1, 0)], 1))
+            _forward_image(cv2.flip(squared_image[:, :, (2, 1, 0)], 1))  # RGB
         else:
             if self._input_image_names.__contains__(input_image_name):
                 self._input_image_path = os.path.join(self.settings.input_image_path, input_image_name)
-                image = caffe.io.load_image(self._input_image_path)
+                image = caffe.io.load_image(self._input_image_path)  # RGB
                 image = _square(image)
                 _forward_image(image)
 
@@ -198,7 +201,7 @@ class NN_Vis_Demo_Model(QObject):
                 if os.path.exists(file_path):
                     pixmaps.append(QPixmap(file_path))
                 else:
-                    print file_path + " not exits."
+                    print file_path + " not exists."
             return pixmaps
 
     def get_top_1_images_of_layer(self, layer_name):
@@ -267,7 +270,7 @@ class NN_Vis_Demo_Model(QObject):
 
     def switch_camera(self, on):
         if on:
-            self.cap.open(0)
+            self.cap.open(self.camera_id)
         else:
             self.cap.release()
 
@@ -275,19 +278,24 @@ class NN_Vis_Demo_Model(QObject):
         self._layer_list = []
         self._layer_output_sizes = {}
         # go over layers
-        total_layer_number = len(list(self._net._layer_names))
-        idx = 0
-        for layer_name in list(self._net._layer_names):
-            idx += 1
+        all_layer_list = list(self._net._layer_names)
+        total_layer_number = len(all_layer_list)
+        for idx in range(total_layer_number):
+            layer_name = all_layer_list[idx]
             # skip input, output and inplace layers. eg. relu
-            if idx == 1 or idx == total_layer_number or (
+            if idx == 0 or idx == total_layer_number - 1 or (
                     len(self._net.top_names[layer_name]) == 1 and len(self._net.bottom_names[layer_name]) == 1 and
                     self._net.top_names[layer_name][0] == self._net.bottom_names[layer_name][0]):
                 continue
 
             self._layer_list.append(layer_name)
 
-            # get output size
+            # get layer output size
             top_shape = self._net.blobs[layer_name].data[0].shape
 
             self._layer_output_sizes.update({layer_name: top_shape})
+
+        # get data blob name
+        self._data_blob_name = self._net.top_names[all_layer_list[0]][0]
+        # get input dims
+        self._input_dims = self._net.blobs[self._data_blob_name].data.shape[2:4]

@@ -76,7 +76,8 @@ class DetailedUnitViewWidget(QLabel):
     def display_activation(self, data, input_image):
         self.working_mode = self.WorkingMode.ACTIVATION.value
         self.activation = data
-        self.input_image = input_image
+        self.input_image = cv2.resize(input_image, (self.IMAGE_SIZE.width(), self.IMAGE_SIZE.height()),
+                                           interpolation=cv2.INTER_NEAREST)
         self.set_overlay_view(self.overlay_mode)
 
     def display_deconv(self, data):
@@ -120,7 +121,7 @@ class DetailedUnitViewWidget(QLabel):
 
     def set_overlay_view(self, mode=OverlayOptions.No_OVERLAY.value):
         def Sigmoid(x):
-            return np.divide(1 , (1 + np.exp(-x)));
+            return np.divide(1 , (1 + np.exp(-x)))
 
         self.overlay_mode = mode
         if not hasattr(self, 'activation') or self.working_mode != self.WorkingMode.ACTIVATION.value:
@@ -356,19 +357,21 @@ class NN_Vis_Demo_View(QMainWindow):
         combo_model.activated[str].connect(self.ctl.set_model)
         lbl_input = QLabel('Input')
         lbl_input.setFont(font_bold)
-        combo_input_source = QComboBox(self)
-        combo_input_source.addItem('')  # null entry
-        combo_input_source.addItem('Image')
-        combo_input_source.addItem('Video')
-        combo_input_source.activated[str].connect(self.ctl.switch_source)
-        combo_input_source.setCurrentText('Image')
+        self.combo_input_source = QComboBox(self)
+        self.combo_input_source.addItem('')  # null entry
+        self.combo_input_source.addItem('Image')
+        self.combo_input_source.addItem('Video')
+        self.combo_input_source.activated[str].connect(self.ctl.switch_source)
+        self.combo_input_source.setCurrentText('Image')
+        self.combo_input_source.setEnabled(False)
         self.combo_input_image = QComboBox(self)
         self.combo_input_image.addItem('')  # null entry
         self.combo_input_image.activated[str].connect(self.ctl.set_input_image)
+        self.combo_input_image.setEnabled(False)
         grid_input.addWidget(lbl_model, 0, 1)
         grid_input.addWidget(combo_model, 0, 2)
         grid_input.addWidget(lbl_input, 1, 1)
-        grid_input.addWidget(combo_input_source, 1, 2)
+        grid_input.addWidget(self.combo_input_source, 1, 2)
         grid_input.addWidget(self.combo_input_image, 2, 1, 1, 2)
         vbox1.addLayout(grid_input)
 
@@ -586,6 +589,8 @@ class NN_Vis_Demo_View(QMainWindow):
             self.update_combobox_input_image()
         elif data_idx == NN_Vis_Demo_Model.data_idx_layer_names:
             self.draw_network_overview()
+            self.combo_input_source.setEnabled(True)  # enable source switching after the model is fully loaded
+            self.combo_input_image.setEnabled(True)
         elif data_idx == NN_Vis_Demo_Model.data_idx_new_input:
             self.refresh()
 

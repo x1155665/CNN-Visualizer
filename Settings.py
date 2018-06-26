@@ -14,6 +14,7 @@ class Settings:
             self.main_settings.update(yaml.load(fp))
         self.use_GPU = self.main_settings['Use_GPU']
         self.gpu_id = self.main_settings['GPU_ID']
+        self.camera_id = self.main_settings['Camera_ID']
         self.caffevis_caffe_root = self.main_settings['caffevis_caffe_root']
         for key in self.main_settings['Model_config_path']:
             self.model_names.append(key)

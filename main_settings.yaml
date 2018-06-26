@@ -2,6 +2,8 @@
 Use_GPU: true
 GPU_ID: 0
 
+Camera_ID: 0
+
 caffevis_caffe_root: "../deep-visualization-toolbox/caffe/"
 
 # Paths to the yaml setting file of the models
@@ -11,3 +13,4 @@ Model_config_path:
   Icons: "./model_icons_settings.yaml"
   Simpsons: "./model_simpsons_settings.yaml"
   Pokemon: "./model_pokemon_settings.yaml"
+  Caffenet_yos: "./model_caffenet_settings.yaml"

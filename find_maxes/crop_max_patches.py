@@ -24,12 +24,12 @@ import Settings
 def main():
     parser = argparse.ArgumentParser(
         description='Loads a pickled NetMaxTracker and outputs one or more of {the patches of the image, a deconv patch, a backprop patch} associated with the maxes.')
-    parser.add_argument('--model-name')
+    parser.add_argument('--model')
     parser.add_argument('--idx-begin', type=int, default=None, help='Start at this unit (default: all units).')
     parser.add_argument('--idx-end', type=int, default=None, help='End at this unit (default: all units).')
     args = parser.parse_args()
     settings = Settings.Settings()
-    settings.load_settings(args.model_name)
+    settings.load_settings(args.model)
 
     net = load_network(settings)
 

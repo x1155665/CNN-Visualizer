@@ -22,10 +22,10 @@ import Settings
 def main():
     parser = argparse.ArgumentParser(
         description='Finds images in a training set that cause max activation for a network; saves results in a pickled NetMaxTracker.')
-    parser.add_argument('--model-name')
+    parser.add_argument('--model')
     args = parser.parse_args()
     settings = Settings.Settings()
-    settings.load_settings(args.model_name)
+    settings.load_settings(args.model)
     net = load_network(settings)
 
     # set network batch size
