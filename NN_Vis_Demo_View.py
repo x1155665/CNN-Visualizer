@@ -6,8 +6,8 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QMargins, QThread
-from PyQt5.QtGui import QFont, QColor, QPainter, QPixmap, QImage
-from PyQt5.QtWidgets import (QMainWindow, QDesktopWidget, QLabel, QComboBox,
+from PyQt5.QtGui import QFont, QColor, QPainter, QPixmap, QImage, QStandardItemModel, QStandardItem
+from PyQt5.QtWidgets import (QMainWindow, QDesktopWidget, QLabel, QComboBox, QTableView,
                              QWidget, QHBoxLayout, QVBoxLayout, QGridLayout,
                              QRadioButton, QGroupBox, QScrollArea, QFrame)
 from enum import Enum
@@ -310,20 +310,26 @@ class ProbsView(QGroupBox):
     def __init__(self):
         super(QGroupBox, self).__init__()
         self.setTitle("Results")
+        self.setFixedHeight(220)
         vbox_probs = QVBoxLayout()
-        self.lbl_probs = QLabel('#1 \n#2 \n#3 \n#4 \n#5 ')
-        vbox_probs.addWidget(self.lbl_probs)
+        self.tableview = QTableView()
+        self.model = QStandardItemModel(self.tableview)
+        self.model.setColumnCount(2)
+        self.model.setHeaderData(0, Qt.Horizontal, 'Label')
+        self.model.setHeaderData(1, Qt.Horizontal, 'Prob.')
+        self.tableview.setModel(self.model)
+        self.tableview.setColumnWidth(0, 180)
+        self.tableview.setColumnWidth(1, 60)
+        vbox_probs.addWidget(self.tableview)
         self.setLayout(vbox_probs)
 
     def set_probs(self, probs, labels):
         num = min(5, len(probs))
+        self.model.setRowCount(num)
         sorted_results_idx = sorted(range(len(probs)), reverse=True, key=lambda k: probs[k])
-        txt = ''
         for i in range(num):
-            if i != 0:
-                txt += '\n'
-            txt += '#%d %+16s    %4.2f%%' % (i, labels[sorted_results_idx[i]], probs[sorted_results_idx[i]] * 100)
-        self.lbl_probs.setText(txt)
+            self.model.setItem(i,0, QStandardItem('%s' % labels[sorted_results_idx[i]]))
+            self.model.setItem(i, 1, QStandardItem('%4.2f%%' % (probs[sorted_results_idx[i]] * 100)))
 
 
 class NN_Vis_Demo_View(QMainWindow):
