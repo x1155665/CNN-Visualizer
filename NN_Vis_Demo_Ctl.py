@@ -1,6 +1,6 @@
-from PyQt5.QtCore import Qt, pyqtSignal, QThread
+from PyQt5.QtCore import pyqtSignal, QThread
 import time
-import caffe
+import sys, os
 
 
 class NN_Vis_Demo_Ctl(QThread):
@@ -19,6 +19,8 @@ class NN_Vis_Demo_Ctl(QThread):
 
     def run(self):
         """ ops must be run here to avoid conflict """
+        sys.path.insert(0, os.path.join(self.model.caffevis_caffe_root, 'python'))
+        import caffe
         caffe.set_mode_gpu()  # otherwise caffe will run with cpu in this thread
         while True:
             if self.FLAG_set_model:

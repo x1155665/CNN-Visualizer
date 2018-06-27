@@ -8,9 +8,6 @@ from enum import Enum
 import time
 from Settings import Settings
 
-import caffe
-caffevis_caffe_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(caffe.__file__))))
-
 
 # todo: get data, input and output layer names from prototxt
 class NN_Vis_Demo_Model(QObject):
@@ -37,7 +34,9 @@ class NN_Vis_Demo_Model(QObject):
     def __init__(self):
         super(QObject, self).__init__()
         self.settings = Settings()
-
+        self.caffevis_caffe_root = self.settings.caffevis_caffe_root
+        sys.path.insert(0, os.path.join(self.caffevis_caffe_root, 'python'))
+        import caffe
         if self.settings.use_GPU:
             caffe.set_mode_gpu()
             caffe.set_device(self.settings.gpu_id)
@@ -63,6 +62,9 @@ class NN_Vis_Demo_Model(QObject):
             self.load_net(model_name)
 
     def load_net(self, model_name):
+        sys.path.insert(0, os.path.join(self.caffevis_caffe_root, 'python'))
+        import caffe
+
         self._model_name = model_name
         self._model_def = self.settings.prototxt
         self._model_weights = self.settings.network_weights
@@ -95,6 +97,8 @@ class NN_Vis_Demo_Model(QObject):
         :param input_image_name: The file name of the local image file
         :param video: set True to use camera s input
         """
+        sys.path.insert(0, os.path.join(self.caffevis_caffe_root, 'python'))
+        import caffe
 
         def _forward_image(_image):
             input_image = caffe.io.resize(_image, self._input_dims, mode='constant', cval=0)
@@ -263,7 +267,7 @@ class NN_Vis_Demo_Model(QObject):
                     new_proto_file.write(line)
 
         # run upgrade tool on new file name (same output file)
-        upgrade_tool_command_line = caffevis_caffe_root + '/build/tools/upgrade_net_proto_text.bin ' + processed_prototxt + ' ' + processed_prototxt
+        upgrade_tool_command_line = self.caffevis_caffe_root + '/build/tools/upgrade_net_proto_text.bin ' + processed_prototxt + ' ' + processed_prototxt
         os.system(upgrade_tool_command_line)
 
         return processed_prototxt
