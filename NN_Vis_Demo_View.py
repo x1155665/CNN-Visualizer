@@ -38,21 +38,32 @@ def norm0255c(arr, center):
     return arr
 
 
-# detailed unit view
 class DetailedUnitViewWidget(QLabel):
+    """
+    Detailed unit view that shows the actvation and the deconv of the selected unit
+    """
     IMAGE_SIZE = QSize(224, 224)
 
     class WorkingMode(Enum):
+        """
+        supported working modes
+        """
         ACTIVATION = 'Activation'
         DECONV = 'Deconv'
 
     class BackpropViewOption(Enum):
+        """
+        Supported "after effects"
+        """
         RAW = 'raw'
         GRAY = 'gray'
         NORM = 'norm'
         NORM_BLUR = 'blurred norm'
 
     class OverlayOptions(Enum):
+        """
+        Supported overlay options
+        """
         No_OVERLAY = 'No overlay'
         OVER_ACTIVE = 'Over active'
         OVER_INACTIVE = 'Over inactive'
@@ -70,22 +81,38 @@ class DetailedUnitViewWidget(QLabel):
         self.setFixedSize(QSize(240, 240))
         self.setStyleSheet("QWidget {background-color: blue}")
         self.overlay_mode = self.OverlayOptions.No_OVERLAY.value
-        self.working_mode = self.WorkingMode.ACTIVATION.value
+        self.working_mode = self.WorkingMode.ACTIVATION.value  # not used if the comboxes are included in the detailed view
         self.backprop_view_mode = self.BackpropViewOption.RAW.value
 
     def display_activation(self, data, input_image):
+        """
+        display the activation.
+        :param data: activation
+        :param input_image: used fot the overlay
+        :return:
+        """
         self.working_mode = self.WorkingMode.ACTIVATION.value
         self.activation = data
         self.input_image = cv2.resize(input_image, (self.IMAGE_SIZE.width(), self.IMAGE_SIZE.height()),
                                            interpolation=cv2.INTER_NEAREST)
-        self.set_overlay_view(self.overlay_mode)
+        self.set_overlay_view(self.overlay_mode)  # make display, evtl. with overlay
 
     def display_deconv(self, data):
+        """
+        Display the deconvolution/backprop image
+        :param data: deconv/backprop result
+        :return:
+        """
         self.working_mode = self.WorkingMode.DECONV.value
         self.deconv = data
-        self.set_backprop_view(self.backprop_view_mode)
+        self.set_backprop_view(self.backprop_view_mode)  # make display
 
     def mouseDoubleClickEvent(self, QMouseEvent):
+        """
+        Open the image in with system default app
+        :param QMouseEvent:
+        :return:
+        """
         self.pixmap().save('./Temps/ForExternalProgram.png')
         Image.open("./Temps/ForExternalProgram.png").show()
 
@@ -94,6 +121,7 @@ class DetailedUnitViewWidget(QLabel):
         if hasattr(self, 'deconv') == False or self.working_mode != self.WorkingMode.DECONV.value:
             return
 
+        # provess the deconv data
         data = self.deconv
         data = cv2.resize(data, (self.IMAGE_SIZE.width(), self.IMAGE_SIZE.height()))
         if view_mode == self.BackpropViewOption.RAW.value:
@@ -112,9 +140,10 @@ class DetailedUnitViewWidget(QLabel):
             rgba_image = cmap(data)
             data = np.delete(rgba_image, 3, 2)
             data *= 255
-
         if data.dtype != np.uint8:
             data = data.astype(np.uint8)
+
+        # display the result
         image = QImage(data.tobytes(), data.shape[0], data.shape[1], data.shape[1] * 3, QImage.Format_RGB888)
         pixmap = QPixmap.fromImage(image)
         self.setPixmap(pixmap)
@@ -446,6 +475,8 @@ class NN_Vis_Demo_View(QMainWindow):
         vbox3 = QVBoxLayout()
         vbox3.setAlignment(Qt.AlignTop)
 
+        # region unit view
+        # todo: make a customized widget for this region?
         # header
         self.combo_unit_view = QComboBox(self)
         for member in DetailedUnitViewWidget.WorkingMode:
@@ -459,8 +490,6 @@ class NN_Vis_Demo_View(QMainWindow):
         hbox_unit_view_header.addWidget(self.combo_unit_view)
         hbox_unit_view_header.addWidget(self.lbl_unit_name)
         vbox3.addLayout(hbox_unit_view_header)
-
-        # region settings of unit view
 
         # overlay setting
         hbox_overlay = QHBoxLayout()
@@ -495,11 +524,11 @@ class NN_Vis_Demo_View(QMainWindow):
         hbox_backprop_view.addWidget(self.combo_unit_backprop_view)
         vbox3.addLayout(hbox_backprop_view)
 
-        # endregion
-
         # unit image
         self.detailed_unit_view = DetailedUnitViewWidget()
         vbox3.addWidget(self.detailed_unit_view)
+
+        # endregion
 
         # spacer
         vbox3.addSpacing(20)

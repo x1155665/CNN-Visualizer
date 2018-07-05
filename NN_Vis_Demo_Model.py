@@ -3,7 +3,6 @@ from PyQt5.QtCore import Qt, pyqtSignal, QObject
 from PyQt5.QtGui import QPixmap
 import os, sys
 import cv2
-import matplotlib.pyplot as plt
 from enum import Enum
 import time
 from Settings import Settings
