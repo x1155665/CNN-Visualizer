@@ -30,6 +30,7 @@ You may need to install [Qt5](https://www.qt.io/download), [SIP](https://www.riv
 Get the code by from [the repository](https://github.com/arikpoz/caffe/tree/7fec25bad4405fb97b9a48d7307d8a8bb8bacae9)
 
 Modify _Makefile.config.example_ accordingly and rename it to _Makefile.config_.
+
 Compile by running:
 ```
 make all pycaffe 
