@@ -14,7 +14,7 @@ class NN_Vis_Demo_Ctl(QThread):
         self.model_name = ''
         self.input_image_name = ''
         self.FLAG_video = False
-        self.new_source = False  # True for Video; False for Image
+        self.camera_as_source = False  # True for Video; False for Image
 
     def run(self):
         """ ops must be run here to avoid conflict """
@@ -24,7 +24,7 @@ class NN_Vis_Demo_Ctl(QThread):
         while True:
             if self.FLAG_set_model:
                 self._set_model(self.model_name)
-            self._switch_source(self.new_source)
+            self._switch_source(self.camera_as_source)
             if self.FLAG_video:
                 self._set_input_image(None, True)
             else:
@@ -41,14 +41,19 @@ class NN_Vis_Demo_Ctl(QThread):
         self.input_image_name = image_name
 
     def switch_source(self, source):
-        self.new_source = source == 'Video'  # True for Video; False for Image
+        self.camera_as_source = source == 'Video'  # True for Video; False for Image
 
     def _switch_source(self, source):
+        """
+        Switch on the camera, then change the FLAG_video to start using the camera as input source.
+        :param source:
+        :return:
+        """
         if self.FLAG_video != source:
             if source:
                 self.model.switch_camera(True)
                 self.FLAG_video = True
-                self.isBusy.emit(True)
+                self.isBusy.emit(True)  # always busy when using camera as source
             else:
                 self.model.switch_camera(False)
                 self.FLAG_video = False
@@ -63,8 +68,6 @@ class NN_Vis_Demo_Ctl(QThread):
 
     def _set_input_image(self, image_name, video=False):
         self.FLAG_set_input = False
-        # print(time.time() - self.start_time)
-        # self.start_time = time.time()
         self.isBusy.emit(True)
         self.model.set_input_and_forward(image_name, video)
         self.isBusy.emit(False)

@@ -850,7 +850,8 @@ class NN_Vis_Demo_View(QMainWindow):
 
     def set_busy(self, isBusy):
         """
-        multiple processes/functions may be busy at the same time
+        multiple processes/functions may be busy at the same time.
+        Possible imporvement: Busy-ID registration
         :param isBusy:
         :return:
         """
