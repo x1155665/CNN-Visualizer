@@ -20,6 +20,10 @@ Missing feature:
 The GUI looks like this:
 ![Screenshot](doc_pic/GUI_example.png)
  
+## Supported network architectures
+In the very beginning, This tool was intended for VGG16. Support for other VGG16-like CNNs were added later.
+
+Non-sequential networks are not supported.    
  
 ## Setting up
 
