@@ -9,7 +9,7 @@ from Settings import Settings
 
 
 # TODO: Improve the notification mechanism between model and view
-class NN_Vis_Demo_Model(QObject):
+class CNN_Vis_Demo_Model(QObject):
     # These indices are used to notify the view about the changes
     data_idx_model_names = 0
     data_idx_layer_names = 1

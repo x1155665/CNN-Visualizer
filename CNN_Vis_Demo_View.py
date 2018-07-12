@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (QMainWindow, QDesktopWidget, QLabel, QComboBox, QTa
                              QRadioButton, QGroupBox, QScrollArea, QFrame)
 from enum import Enum
 
-from NN_Vis_Demo_Model import NN_Vis_Demo_Model
+from CNN_Vis_Demo_Model import CNN_Vis_Demo_Model
 
 BORDER_WIDTH = 10
 
@@ -159,7 +159,7 @@ class DetailedUnitViewWidget(QLabel):
         # prepare base image
         if mode == self.OverlayOptions.No_OVERLAY.value or mode == self.OverlayOptions.ONLY_ACTIVE.value or \
                 mode == self.OverlayOptions.OVER_INACTIVE.value:
-            pixmap = NN_Vis_Demo_View.get_pixmaps_from_data(np.array([self.activation.astype(np.uint8), ]))[0]
+            pixmap = CNN_Vis_Demo_View.get_pixmaps_from_data(np.array([self.activation.astype(np.uint8), ]))[0]
             pixmap = pixmap.scaledToWidth(self.IMAGE_SIZE.width())
         else:
             pixmap = QPixmap(self.IMAGE_SIZE)
@@ -383,7 +383,7 @@ class ProbsView(QGroupBox):
             self.model.setItem(i, 1, QStandardItem('%4.2f%%' % (probs[sorted_results_idx[i]] * 100)))
 
 
-class NN_Vis_Demo_View(QMainWindow):
+class CNN_Vis_Demo_View(QMainWindow):
     _busy = 0
 
     def __init__(self, model, ctl):
@@ -408,7 +408,7 @@ class NN_Vis_Demo_View(QMainWindow):
         lbl_model.setFont(font_bold)
         combo_model = QComboBox(self)
         combo_model.addItem('')
-        model_names = self.model.get_data(NN_Vis_Demo_Model.data_idx_model_names)
+        model_names = self.model.get_data(CNN_Vis_Demo_Model.data_idx_model_names)
         for model_name in model_names:
             combo_model.addItem(model_name)
         combo_model.activated[str].connect(self.ctl.set_model)
@@ -449,7 +449,7 @@ class NN_Vis_Demo_View(QMainWindow):
         vbox1.addWidget(lbl_arrow_input_to_NN)
 
         # Network overview
-        gb_network = QGroupBox("Neural network")
+        gb_network = QGroupBox("Convolutional Neural network")
         self.scroll_network = QScrollArea()
         self.scroll_network.setFrameShape(QFrame.Box)
         self.scroll_network.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -629,7 +629,7 @@ class NN_Vis_Demo_View(QMainWindow):
         self.statusbar = self.statusBar()
         self.statusbar.showMessage('ready')
         self.setCentralWidget(central_widget)
-        self.setWindowTitle('Neural Network Visualizer')
+        self.setWindowTitle('CNN Visualizer')
         self.center()
         self.showMaximized()
 
@@ -648,19 +648,19 @@ class NN_Vis_Demo_View(QMainWindow):
         :param data_idx: indicates what is changed in model
         :return:
         """
-        if data_idx == NN_Vis_Demo_Model.data_idx_input_image_names:
+        if data_idx == CNN_Vis_Demo_Model.data_idx_input_image_names:
             self.update_combobox_input_image()
-        elif data_idx == NN_Vis_Demo_Model.data_idx_layer_names:
+        elif data_idx == CNN_Vis_Demo_Model.data_idx_layer_names:
             self.draw_network_overview()
             self.combo_input_source.setEnabled(True)  # enable source switching after the model is fully loaded
             self.combo_input_image.setEnabled(True)
-        elif data_idx == NN_Vis_Demo_Model.data_idx_new_input:
+        elif data_idx == CNN_Vis_Demo_Model.data_idx_new_input:
             self.refresh()
 
     def update_combobox_input_image(self):
         self.combo_input_image.clear()
         self.combo_input_image.addItem('')  # null entry
-        input_image_names = self.model.get_data(NN_Vis_Demo_Model.data_idx_input_image_names)
+        input_image_names = self.model.get_data(CNN_Vis_Demo_Model.data_idx_input_image_names)
         for name in input_image_names:
             self.combo_input_image.addItem(name)
 
@@ -715,7 +715,7 @@ class NN_Vis_Demo_View(QMainWindow):
                 try:
                     data = self._prepare_data_for_display(data)
                     self.detailed_unit_view.display_activation(data[self.selected_unit_index], self.model.get_data(
-                        NN_Vis_Demo_Model.data_idx_input_image))
+                        CNN_Vis_Demo_Model.data_idx_input_image))
                 except AttributeError, Argument:
                     pass
 
@@ -798,7 +798,7 @@ class NN_Vis_Demo_View(QMainWindow):
 
     def refresh(self):
         # get input image
-        input_data = self.model.get_data(NN_Vis_Demo_Model.data_idx_input_image)
+        input_data = self.model.get_data(CNN_Vis_Demo_Model.data_idx_input_image)
         if input_data.dtype != np.uint8:
             input_data = input_data.astype(np.uint8)
         image = QImage(input_data.tobytes(), input_data.shape[0], input_data.shape[1], input_data.shape[1] * 3,
@@ -806,8 +806,8 @@ class NN_Vis_Demo_View(QMainWindow):
         self.lbl_input_image.setPixmap(QPixmap.fromImage(image))
 
         # get probs
-        results = self.model.get_data(NN_Vis_Demo_Model.data_idx_probs)
-        labels = self.model.get_data(NN_Vis_Demo_Model.data_idx_labels)
+        results = self.model.get_data(CNN_Vis_Demo_Model.data_idx_probs)
+        labels = self.model.get_data(CNN_Vis_Demo_Model.data_idx_labels)
         self.probs_view.set_probs(results, labels)
 
         # load layer view. This also triggers the last clicked unit to be loaded in unit view
@@ -826,8 +826,8 @@ class NN_Vis_Demo_View(QMainWindow):
         # draw new layout
         vbox_network = QVBoxLayout()
         vbox_network.setAlignment(Qt.AlignCenter)
-        layer_names = self.model.get_data(NN_Vis_Demo_Model.data_idx_layer_names)
-        layer_output_sizes = self.model.get_data(NN_Vis_Demo_Model.data_idx_layer_output_sizes)
+        layer_names = self.model.get_data(CNN_Vis_Demo_Model.data_idx_layer_names)
+        layer_output_sizes = self.model.get_data(CNN_Vis_Demo_Model.data_idx_layer_output_sizes)
         # todo: change the style of layers
         for layer_name in layer_names:
             btn_layer = QRadioButton(layer_name)

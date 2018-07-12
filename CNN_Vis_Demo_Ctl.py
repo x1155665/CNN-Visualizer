@@ -3,7 +3,7 @@ import time
 import sys, os
 
 
-class NN_Vis_Demo_Ctl(QThread):
+class CNN_Vis_Demo_Ctl(QThread):
     isBusy = pyqtSignal(bool)
 
     def __init__(self, model):

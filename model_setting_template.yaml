@@ -1,0 +1,46 @@
+# ===============================================================================
+# Settings for the visualizer
+
+# necessary settings
+# ------------------
+network_weights: "/path/to/the/caffemodel"
+
+prototxt: "/path/to/the/prototxt"
+
+label_file: "/path/to/the/labels/txt"
+# ------------------
+
+# optional settings.
+# -----------------
+input_image_path: "/path/to/input_images"  # pre-selected input images for demostration
+
+deepvis_outputs_path: "/Path/to/top_images"  # Top 9 images and the deconv-norm of them
+
+channel_swap: [0, 1, 2]  # default is BGR!
+
+mean: [103.939, 116.779, 123.68]
+# -----------------
+# ===============================================================================
+
+
+# ===============================================================================
+# extra settings for find_maxes
+
+max_tracker_batch_size: 1
+
+data_dir: "/path/to/dataset"
+
+layers_to_output_in_offline_scripts: ['conv1_1','conv1_2', 'pool1']  # specify the layers to work on
+
+N: 9  # out put the top N images results. CNN-visualizer uses top 9 images
+
+search_min: false  # not used
+
+# crop_max_patxhes.py options
+# (One of them must be true)
+max_tracker_do_maxes: false
+max_tracker_do_deconv: false
+max_tracker_do_deconv_norm: true
+max_tracker_do_backprop: false
+max_tracker_do_backprop_norm: false
+# ===============================================================================
