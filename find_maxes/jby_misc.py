@@ -24,17 +24,17 @@ class WithTimer:
     def __exit__(self, *args):
         if not self.quiet:
             titlestr = self.title + ' ' if self.title else ''
-            print 'Elapsed %sreal: %.06f, sys: %.06f' % ((titlestr,) + self.elapsed())
+            print('Elapsed %sreal: %.06f, sys: %.06f' % ((titlestr,) + self.elapsed()))
 
 def misc_main():
-    print 'Running quick demo'
+    print('Running quick demo')
 
-    print ' -> Before with statement'
+    print(' -> Before with statement')
     with WithTimer('sleepy time'):
-        print '   -> About to sleep'
+        print('   -> About to sleep')
         time.sleep(.5)
-        print '   -> Done sleeping'
-    print ' -> After with statement'
+        print('   -> Done sleeping')
+    print(' -> After with statement')
         
     
 if __name__ == '__main__':

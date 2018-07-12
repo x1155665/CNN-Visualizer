@@ -21,7 +21,7 @@ class Settings:
 
     def load_settings(self, model_name):
         assert model_name in self.main_settings['Model_config_path']
-        print "Loading settings of " + model_name + ' from ' + self.main_settings['Model_config_path'][model_name]
+        print("Loading settings of " + model_name + ' from ' + self.main_settings['Model_config_path'][model_name])
         with open(self.main_settings['Model_config_path'][model_name]) as fp:
             configs = yaml.load(fp)
         self.network_weights = configs['network_weights']

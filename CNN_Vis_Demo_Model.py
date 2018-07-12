@@ -41,11 +41,10 @@ class CNN_Vis_Demo_Model(QObject):
         if self.settings.use_GPU:
             caffe.set_mode_gpu()
             caffe.set_device(self.settings.gpu_id)
-            print 'Loaded caffe in GPU mode, using device', self.settings.gpu_id
+            print('Loaded caffe in GPU mode, using device', self.settings.gpu_id)
         else:
             caffe.set_mode_cpu()
-            print 'Loaded caffe in CPU mode'
-
+            print('Loaded caffe in CPU mode')
         self.camera_id = self.settings.camera_id
         self.cap = cv2.VideoCapture(self.camera_id)
 
@@ -243,7 +242,7 @@ class CNN_Vis_Demo_Model(QObject):
                 if os.path.exists(file_path):
                     pixmaps.append(QPixmap(file_path))
                 else:
-                    print file_path + " not exists."
+                    print(file_path + " not exists.")
             return pixmaps
 
     def get_top_1_images_of_layer(self, layer_name):

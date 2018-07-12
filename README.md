@@ -21,19 +21,19 @@ The GUI looks like this:
 ![Screenshot](doc_pic/GUI_example.png)
  
 ## Supported network architectures
-In the very beginning, This tool was intended for VGG16. Support for other VGG16-like CNNs were added later.
+In the very beginning, this tool was intended for VGG16. Support for other VGG16-like CNNs were added later.
 
 Non-sequential networks are not supported.    
  
 ## Setting up
-
+The visualizer runs with python 2 on linux.
 ### 1. Get PyQt running.
 You may need to install [Qt5](https://www.qt.io/download), [SIP](https://www.riverbankcomputing.com/software/sip/download) and [PyQt5](https://www.riverbankcomputing.com/software/pyqt/download5).
 
 ### 2. Compile the modified caffe by Arik Poznanski
 Get the code by from [the repository](https://github.com/arikpoz/caffe/tree/7fec25bad4405fb97b9a48d7307d8a8bb8bacae9)
 
-Modify _Makefile.config.example_ accordingly and rename it to _Makefile.config_.
+Configure _Makefile.config.example_ accordingly and rename it to _Makefile.config_.
 
 Compile by running:
 ```

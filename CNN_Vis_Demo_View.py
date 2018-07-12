@@ -691,7 +691,7 @@ class CNN_Vis_Demo_View(QMainWindow):
                     pixmaps = self.get_pixmaps_from_data(data)
                 if pixmaps and len(pixmaps)!=0:
                     self.layer_view.set_units(pixmaps)
-            except AttributeError, Argument:
+            except AttributeError:
                 pass
             self.set_busy(False)
 
@@ -716,7 +716,7 @@ class CNN_Vis_Demo_View(QMainWindow):
                     data = self._prepare_data_for_display(data)
                     self.detailed_unit_view.display_activation(data[self.selected_unit_index], self.model.get_data(
                         CNN_Vis_Demo_Model.data_idx_input_image))
-                except AttributeError, Argument:
+                except AttributeError:
                     pass
 
             elif mode == DetailedUnitViewWidget.WorkingMode.DECONV.value:
@@ -727,7 +727,7 @@ class CNN_Vis_Demo_View(QMainWindow):
                                              self.combo_unit_backprop_mode.currentText())
                 try:
                     self.detailed_unit_view.display_deconv(data)
-                except AttributeError, Argument:
+                except AttributeError:
                     pass
             self.set_busy(False)
 
