@@ -188,7 +188,7 @@ class NN_Vis_Demo_Model(QObject):
         elif data_idx == self.data_idx_layer_output_sizes:
             return self._layer_output_sizes
         elif data_idx == self.data_idx_probs:
-            return self._net.blobs['prob'].data.flatten()
+            return self._net.blobs[self._props_blob_name].data.flatten()
         elif data_idx == self.data_idx_input_image_names:
             return self._input_image_names
         elif data_idx == self.data_idx_labels:
@@ -350,3 +350,5 @@ class NN_Vis_Demo_Model(QObject):
         self._data_blob_name = self._net.top_names[all_layer_list[0]][0]
         # get input dims
         self._input_dims = self._net.blobs[self._data_blob_name].data.shape[2:4]
+        # get prob blob name
+        self._props_blob_name = self._net.top_names[all_layer_list[-1]][0]
