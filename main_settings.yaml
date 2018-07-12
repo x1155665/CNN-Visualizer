@@ -4,7 +4,7 @@ GPU_ID: 0
 
 Camera_ID: 0
 
-caffevis_caffe_root: "../deep-visualization-toolbox/caffe/"
+caffevis_caffe_root: "../../Program_files/caffe/"
 
 # Paths to the yaml setting file of the models
 # example:

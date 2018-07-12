@@ -8,8 +8,9 @@ import time
 from Settings import Settings
 
 
-# todo: get data, input and output layer names from prototxt
+# TODO: Improve the notification mechanism between model and view
 class NN_Vis_Demo_Model(QObject):
+    # These indices are used to notify the view about the changes
     data_idx_model_names = 0
     data_idx_layer_names = 1
     data_idx_layer_output_sizes = 2
@@ -32,7 +33,8 @@ class NN_Vis_Demo_Model(QObject):
 
     def __init__(self):
         super(QObject, self).__init__()
-        self.settings = Settings()
+        self.settings = Settings()  # Read settings from files
+
         self.caffevis_caffe_root = self.settings.caffevis_caffe_root
         sys.path.insert(0, os.path.join(self.caffevis_caffe_root, 'python'))
         import caffe
@@ -46,15 +48,18 @@ class NN_Vis_Demo_Model(QObject):
 
         self.camera_id = self.settings.camera_id
         self.cap = cv2.VideoCapture(self.camera_id)
-        self._layer_list = []
-        self._layer_output_sizes = {}
-        # setting frame size not working properly
-        # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 224)
-        # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 224)
 
-        self.online = False
+        self._layer_list = []  # to be read from prototxt
+        self._layer_output_sizes = {}  # to be read from prototxt
+
+        self.online = False  # indicates if the network has finished classifying an image
 
     def set_model(self, model_name):
+        """
+        set the network model
+        :param model_name:
+        :return:
+        """
         if self.settings.model_names.__contains__(model_name):
             self.settings.load_settings(model_name)
             self.online = False
@@ -69,10 +74,9 @@ class NN_Vis_Demo_Model(QObject):
         self._model_weights = self.settings.network_weights
         self._labels = np.loadtxt(self.settings.label_file, str, delimiter='\n')
 
-        processed_prototxt = self._process_network_proto(self._model_def)
+        processed_prototxt = self._process_network_proto(self._model_def)  # enable deconvolution
         self._net = caffe.Classifier(processed_prototxt, self._model_weights, mean=self.settings.mean, raw_scale=255.0,
                                      channel_swap=self.settings.channel_swap)
-        # self._net.transformer.set_mean(self._net.inputs[0], mean)
         current_input_shape = self._net.blobs[self._net.inputs[0]].shape
         current_input_shape[0] = 1
         self._net.blobs[self._net.inputs[0]].reshape(*current_input_shape)
@@ -80,21 +84,25 @@ class NN_Vis_Demo_Model(QObject):
         self._get_layers_info()
         self.dataChanged.emit(self.data_idx_layer_names)
 
+        # get the names of demo-images
         self._input_image_names = [image_name for image_name in os.listdir(self.settings.input_image_path)]
         self.dataChanged.emit(self.data_idx_input_image_names)
-        self._transformer = caffe.io.Transformer({self._data_blob_name: self._net.blobs[self._data_blob_name].data.shape})
+
+        self._transformer = caffe.io.Transformer(
+            {self._data_blob_name: self._net.blobs[self._data_blob_name].data.shape})
         self._transformer.set_transpose(self._data_blob_name, (2, 0, 1))  # move image channels to outermost dimension
-        self._transformer.set_mean(self._data_blob_name, self.settings.mean)  # subtract the dataset-mean value in each channel
+        self._transformer.set_mean(self._data_blob_name,
+                                   self.settings.mean)  # subtract the dataset-mean value in each channel
         self._transformer.set_raw_scale(self._data_blob_name, 255)  # rescale from [0, 1] to [0, 255]
         self._transformer.set_channel_swap(self._data_blob_name, self.settings.channel_swap)
 
     def set_input_and_forward(self, input_image_name, video=False):
         """
         use static image file or camera as input to forward the network.
-        If video is set, input_image_name will be ignored.
         View will be informed to resfresh the content.
+        If video is set, input_image_name will be ignored.
         :param input_image_name: The file name of the local image file
-        :param video: set True to use camera s input
+        :param video: set True to use camera as input
         """
         sys.path.insert(0, os.path.join(self.caffevis_caffe_root, 'python'))
         import caffe
@@ -109,8 +117,11 @@ class NN_Vis_Demo_Model(QObject):
             self.dataChanged.emit(self.data_idx_new_input)
 
         def _square(_image):
-            # adjust image dimensions so that the image will be expanded to the largest side
-            # padding order: top, bottom, left, right
+            """
+            adjust image dimensions so that the image will be expanded to the largest side padding order: top, bottom, left, right
+            :param _image: image to be processed
+            :return: processed image
+            """
             [height, width, _] = _image.shape
             # icon portrait mode
             if width < height:
@@ -137,7 +148,11 @@ class NN_Vis_Demo_Model(QObject):
                 return _image
 
         def _crop_max_square(_image):
-            # crop the biggest square from the center of a image
+            """
+            crop the biggest square at the center of a image
+            :param _image: image to be processed
+            :return: processed image
+            """
             h, w, c = _image.shape
             l = min(h, w)
             if (h + l) % 2 != 0:
@@ -160,6 +175,12 @@ class NN_Vis_Demo_Model(QObject):
                 _forward_image(image)
 
     def get_data(self, data_idx):
+        """
+        Use the data index to get the data.
+        The intend was to add control logic in access. But, this seems to be useless.
+        :param data_idx:
+        :return: Desired data
+        """
         if data_idx == self.data_idx_model_names:
             return self.settings.model_names
         elif data_idx == self.data_idx_layer_names:
@@ -178,17 +199,35 @@ class NN_Vis_Demo_Model(QObject):
             return self._input_image
 
     def get_activations(self, layer_name):
+        """
+        Get all the activations of one layer
+        :param layer_name:
+        :return: activations (N, H, W)
+        """
         if self.online and self._layer_list.__contains__(layer_name):
             activations = self._net.blobs[layer_name].data[0]
             return activations
 
     def get_activation(self, layer_name, unit_index):
+        """
+        Get the activation of a neuron
+        :param layer_name:
+        :return: activations (H, W)
+        """
         if self.online and self._layer_list.__contains__(layer_name) and unit_index < \
                 self._layer_output_sizes[layer_name][0]:
             activation = self._net.blobs[layer_name].data[0][unit_index]
             return activation
 
     def get_top_k_images_of_unit(self, layer_name, unit_index, k, get_deconv):
+        """
+        Get k images with highest acivation to one certain neuron.
+        :param layer_name:
+        :param unit_index:
+        :param k:
+        :param get_deconv: Get the deconv results of the top images
+        :return: Desired top k images
+        """
         if self.online and self.settings.deepvis_outputs_path and self._layer_list.__contains__(layer_name) \
                 and unit_index < self._layer_output_sizes[layer_name][0]:
             unit_dir = os.path.join(self.settings.deepvis_outputs_path, layer_name, 'unit_%04d' % unit_index)
@@ -208,6 +247,11 @@ class NN_Vis_Demo_Model(QObject):
             return pixmaps
 
     def get_top_1_images_of_layer(self, layer_name):
+        """
+        Get the top 1 images of all units in one layers
+        :param layer_name:
+        :return: The images with highest activations to the units
+        """
         if self.online and self.settings.deepvis_outputs_path and self._layer_list.__contains__(layer_name):
             channel_number = self._layer_output_sizes[layer_name][0]
             pixmaps = []
@@ -219,6 +263,13 @@ class NN_Vis_Demo_Model(QObject):
             return pixmaps
 
     def get_deconv(self, layer_name, unit_index, backprop_mode):
+        """
+        Compute the backprop/deconv of one unit
+        :param layer_name:
+        :param unit_index:
+        :param backprop_mode: Avaliable options: self.BackpropModeOption
+        :return: result
+        """
         diffs = self._net.blobs[layer_name].diff[0]
         diffs = diffs * 0
         data = self._net.blobs[layer_name].data[0]
@@ -237,13 +288,6 @@ class NN_Vis_Demo_Model(QObject):
         if result is not None:
             result = np.transpose(result[self._net.inputs[0]][0], (1, 2, 0))
         return result
-
-    def _get_sorted_probs(self):
-        results = self._net.blobs['prob'].data.flatten()
-        sorted_results_idx = sorted(range(len(results)), reverse=True, key=lambda k: results[k])
-        evaluation = [{self._labels[sorted_results_idx[k]]: results[sorted_results_idx[k]]} for k in
-                      range(len(results))]
-        return evaluation
 
     def _process_network_proto(self, prototxt):
         processed_prototxt = prototxt + ".processed_by_deepvis"
@@ -278,6 +322,10 @@ class NN_Vis_Demo_Model(QObject):
             self.cap.release()
 
     def _get_layers_info(self):
+        """
+        Get the layer names / output sizes / 'data' blob name / input dimension
+        :return:
+        """
         self._layer_list = []
         self._layer_output_sizes = {}
         # go over layers

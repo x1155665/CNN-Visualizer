@@ -204,8 +204,10 @@ class DetailedUnitViewWidget(QLabel):
         self.setPixmap(pixmap)
 
 
-# clickable QLabel in Layer View
 class SmallUnitViewWidget(QLabel):
+    """
+    clickable QLabel in Layer View
+    """
     clicked = pyqtSignal()
 
     def __init__(self):
@@ -218,26 +220,38 @@ class SmallUnitViewWidget(QLabel):
     def mousePressEvent(self, QMouseEvent):
         self.clicked.emit()
 
+
 from PIL import Image
-# double-clickable QLabel
+
 class DoubleClickableQLabel(QLabel):
+    """
+    double-clickable QLabel
+    """
     def __init__(self):
         super(QLabel, self).__init__()
 
     def mouseDoubleClickEvent(self, QMouseEvent):
+        """
+        Open the image with Imagemagick
+        :param QMouseEvent:
+        :return:
+        """
         self.pixmap().save('./Temps/ForExternalProgram.png')
         Image.open("./Temps/ForExternalProgram.png").show()
 
 
 class LayerViewWidget(QScrollArea):
+    """
+    Reason for QScrollArea: Use scroll wheel to resize the units in the layer view.
+    However, this feature is not yet added
+    """
     MIN_SCALE_FAKTOR = 0.2
 
     clicked_unit_index = 0
+    clicked_unit_changed = pyqtSignal(int)
 
     n_w = 1  # number of units per row
     n_h = 1  # number of units per column
-
-    clicked_unit_changed = pyqtSignal(int)
 
     def __init__(self, units):
         super(QScrollArea, self).__init__()
@@ -256,6 +270,11 @@ class LayerViewWidget(QScrollArea):
         self.grid.setContentsMargins(QMargins(0, 0, 0, 0))
 
     def allocate_units(self, units):
+        """
+        Allocate the units properly
+        :param units:
+        :return:
+        """
         if not units or len(units)==0:
             return
 
@@ -269,7 +288,7 @@ class LayerViewWidget(QScrollArea):
         denominator = 2 * N
         d = np.floor(np.divide(numerator, denominator))
 
-        # if the resulting unit size is too small, display the unit s with the allowed minimum size
+        # if the resulting unit size is too small, display the units with the allowed minimum size
         allowed_min_width = np.ceil(np.multiply(oroginal_unit_width, self.MIN_SCALE_FAKTOR))
         self.displayed_unit_width = np.maximum(d - BORDER_WIDTH, allowed_min_width)
 
@@ -289,6 +308,7 @@ class LayerViewWidget(QScrollArea):
 
     def _activate_last_clicked_unit(self):
         if self.clicked_unit_index >= len(self.units):
+            # When the layer changes, the number of units may also change. The last selected index may be invalid in the new layer.
             self.clicked_unit_index = 0
         last_clicked_position = (self.clicked_unit_index // self.n_w, np.remainder(self.clicked_unit_index, self.n_w))
         last_clicked_unit = self.grid.itemAtPosition(last_clicked_position[0], last_clicked_position[1]).widget()
@@ -302,7 +322,6 @@ class LayerViewWidget(QScrollArea):
         # activate the clicked one
         clicked_unit = self.sender()
         clicked_unit.setStyleSheet("QWidget {  background-color: blue}")
-        start = time.time()
         self.clicked_unit_changed.emit(clicked_unit.index)  # notify the main view to change the unit view
         self.clicked_unit_index = clicked_unit.index
 
@@ -336,6 +355,9 @@ class LayerViewWidget(QScrollArea):
 
 
 class ProbsView(QGroupBox):
+    """
+    Show top 5 results in a table
+    """
     def __init__(self):
         super(QGroupBox, self).__init__()
         self.setTitle("Results")
@@ -374,7 +396,7 @@ class NN_Vis_Demo_View(QMainWindow):
         self.ctl.start(priority=QThread.NormalPriority)
 
     def initUI(self):
-        # region vbox1
+        # region vbox1 Overview
         vbox1 = QVBoxLayout()
         vbox1.setAlignment(Qt.AlignCenter)
 
@@ -390,6 +412,7 @@ class NN_Vis_Demo_View(QMainWindow):
         for model_name in model_names:
             combo_model.addItem(model_name)
         combo_model.activated[str].connect(self.ctl.set_model)
+
         lbl_input = QLabel('Input')
         lbl_input.setFont(font_bold)
         self.combo_input_source = QComboBox(self)
@@ -399,6 +422,7 @@ class NN_Vis_Demo_View(QMainWindow):
         self.combo_input_source.activated[str].connect(self.ctl.switch_source)
         self.combo_input_source.setCurrentText('Image')
         self.combo_input_source.setEnabled(False)
+
         self.combo_input_image = QComboBox(self)
         self.combo_input_image.addItem('')  # null entry
         self.combo_input_image.activated[str].connect(self.ctl.set_input_image)
@@ -410,6 +434,7 @@ class NN_Vis_Demo_View(QMainWindow):
         grid_input.addWidget(self.combo_input_image, 2, 1, 1, 2)
         vbox1.addLayout(grid_input)
 
+        # input image
         pixm_input = QPixmap(QSize(224, 224))
         pixm_input.fill(Qt.black)
         self.lbl_input_image = DoubleClickableQLabel()
@@ -446,7 +471,7 @@ class NN_Vis_Demo_View(QMainWindow):
         vbox1.addWidget(self.probs_view)
         # endregion
 
-        # region vbox2
+        # region vbox2 layer view
         vbox2 = QVBoxLayout()
         vbox2.setAlignment(Qt.AlignTop)
 
@@ -457,15 +482,13 @@ class NN_Vis_Demo_View(QMainWindow):
         self.combo_layer_view.currentTextChanged.connect(self.load_layer_view)
         selected_layer_name = ' '
         self.lbl_layer_name = QLabel(
-            "of layer <font color='blue'><b>%r</b></font>" % selected_layer_name)  # todo: delete default value
-        # ckb_group_units = QCheckBox('Group similar units')
+            "of layer <font color='blue'><b>%r</b></font>" % selected_layer_name)
         grid_layer_header = QGridLayout()
         grid_layer_header.addWidget(self.combo_layer_view, 0, 1)
         grid_layer_header.addWidget(self.lbl_layer_name, 0, 2)
-        # grid_layer_header.addWidget(ckb_group_units, 0, 4)
         vbox2.addLayout(grid_layer_header)
 
-        # layer (units) view
+        # layer view
         self.layer_view = LayerViewWidget(None)
         self.layer_view.clicked_unit_changed.connect(self.select_unit_action)
         vbox2.addWidget(self.layer_view)
@@ -620,6 +643,11 @@ class NN_Vis_Demo_View(QMainWindow):
         self.ctl.quit()  # stop the controller thread
 
     def update_data(self, data_idx):
+        """
+        Change the view according to the updates from the model
+        :param data_idx: indicates what is changed in model
+        :return:
+        """
         if data_idx == NN_Vis_Demo_Model.data_idx_input_image_names:
             self.update_combobox_input_image()
         elif data_idx == NN_Vis_Demo_Model.data_idx_layer_names:
@@ -645,7 +673,10 @@ class NN_Vis_Demo_View(QMainWindow):
     def load_layer_view(self):
         if hasattr(self, 'selected_layer_name'):
             self.set_busy(True)
+
+            #change the header of layer view
             self.lbl_layer_name.setText("of layer <font color='blue'><b>%s</b></font>" % str(self.selected_layer_name))
+
             try:
                 pixmaps = []
                 if self.combo_layer_view.currentText() == 'Top 1 images':
@@ -653,7 +684,8 @@ class NN_Vis_Demo_View(QMainWindow):
                             or self.last_shown_unit_info['model_name'] != self.ctl.model_name \
                             or (self.sender() and self.sender() == self.combo_layer_view):  # load only when changed
                         pixmaps = self.model.get_top_1_images_of_layer(self.selected_layer_name)
-                else:  # load activations
+                else:
+                    # load activations
                     data = self.model.get_activations(self.selected_layer_name)
                     data = self._prepare_data_for_display(data)
                     pixmaps = self.get_pixmaps_from_data(data)
@@ -730,11 +762,17 @@ class NN_Vis_Demo_View(QMainWindow):
             self.last_shown_unit_info['channel'] = self.selected_unit_index
             self.set_busy(False)
 
-    # if the data has colors, argument 'data' is a 4D (conv_layer) or 3D (fc_layer) array,
-    # else the 'data' is a 3D (conv_layer) or 2D (fc_layer) array.
-    # The first axis is the unit index
+
     @staticmethod
     def get_pixmaps_from_data(data, color=False):
+        """
+        if the data has colors, argument 'data' is a 4D (conv_layer) or 3D (fc_layer) array,
+        else the 'data' is a 3D (conv_layer) or 2D (fc_layer) array.
+        The first axis is the unit index
+        :param data:
+        :param color: if the image is color-image
+        :return:
+        """
         data = data.astype(np.uint8)  # convert to 8-bit unsigned integer
         pixmaps = []
         num = data.shape[0]
@@ -793,7 +831,7 @@ class NN_Vis_Demo_View(QMainWindow):
         # todo: change the style of layers
         for layer_name in layer_names:
             btn_layer = QRadioButton(layer_name)
-            btn_layer.setFont(QFont('Times', 11, QFont.Bold))
+            btn_layer.setFont(QFont('Helvetica', 11, QFont.Bold))
             btn_layer.toggled.connect(self.select_layer_action)
             vbox_network.addWidget(btn_layer)
             size = layer_output_sizes[layer_name]
@@ -811,12 +849,19 @@ class NN_Vis_Demo_View(QMainWindow):
         pass
 
     def set_busy(self, isBusy):
+        """
+        multiple processes/functions may be busy at the same time
+        :param isBusy:
+        :return:
+        """
         previous_busy_count = self._busy
         if isBusy:
             self._busy += 1
         else:
             self._busy -= 1
         assert self._busy >= 0  # setting not_busy before setting busy is not allowed!
+
+        # change the message in statusbar (only when nedded)
         if self._busy == 0:
             self.statusbar.showMessage('Ready')
         elif previous_busy_count == 0:

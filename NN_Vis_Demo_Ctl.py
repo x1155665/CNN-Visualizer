@@ -13,7 +13,6 @@ class NN_Vis_Demo_Ctl(QThread):
         self.FLAG_set_input = False
         self.model_name = ''
         self.input_image_name = ''
-        # self.start_time = 0
         self.FLAG_video = False
         self.new_source = False  # True for Video; False for Image
 
