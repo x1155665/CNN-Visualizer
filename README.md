@@ -26,9 +26,21 @@ In the very beginning, this tool was intended for VGG16. Support for other VGG16
 Non-sequential networks are not supported.    
  
 ## Setting up
-The visualizer runs with python 2 on linux.
+While the "master" branch runs with python2, the "py3" branch runs with python3. 
 ### 1. Get PyQt running.
 You may need to install [Qt5](https://www.qt.io/download), [SIP](https://www.riverbankcomputing.com/software/sip/download) and [PyQt5](https://www.riverbankcomputing.com/software/pyqt/download5).
+
+For python3, you can use pip3 to install SIP and PyQt5:
+```
+pip3 install PyQt5-sip
+pip3 install PyQt5
+```
+For python2, you have to download the source of [SIP](https://www.riverbankcomputing.com/software/sip/download) and [PyQt5](https://www.riverbankcomputing.com/software/pyqt/download5), then install the package by running:
+```
+python2 configure.py
+make 
+make install
+``` 
 
 ### 2. Compile the modified caffe by Arik Poznanski
 Get the code by from [the repository](https://github.com/arikpoz/caffe/tree/7fec25bad4405fb97b9a48d7307d8a8bb8bacae9)
@@ -47,8 +59,8 @@ Use _model_setting_template.yaml_ as template to create settings file for the ne
 
 Compute the top images (optional):
 ```
-python find_maxes/find_max_act.py --model dummy_model_name
-python find_maxes/crop_max_patches.py --model dummy_model_name
+python find_maxes/find_max_act.py --model model_name
+python find_maxes/crop_max_patches.py --model model_name
 ```
 
 Run the tool by:

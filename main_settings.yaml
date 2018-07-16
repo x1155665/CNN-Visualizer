@@ -10,7 +10,4 @@ caffevis_caffe_root: "../../Program_files/caffe/"
 # example:
 # model_A : /path/to/the/setting/file/of/model_A
 Model_config_path:
-  Icons: "./model_icons_settings.yaml"
   Simpsons: "./model_simpsons_settings.yaml"
-  Pokemon: "./model_pokemon_settings.yaml"
-  Caffenet_yos: "./model_caffenet_settings.yaml"
