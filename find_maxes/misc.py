@@ -14,10 +14,10 @@ def load_network(settings):
     if settings.use_GPU:
         caffe.set_mode_gpu()
         caffe.set_device(settings.gpu_id)
-        print 'Loaded caffe in GPU mode, using device', settings.gpu_id
+        print('Loaded caffe in GPU mode, using device', settings.gpu_id)
     else:
         caffe.set_mode_cpu()
-        print 'Loaded caffe in CPU mode'
+        print('Loaded caffe in CPU mode')
 
     processed_prototxt = process_network_proto(settings.prototxt, settings.caffevis_caffe_root)
 
@@ -181,11 +181,11 @@ def mkdir_p(path):
 
 
 def get_files_list(data_dir):
-    print 'Getting image list...'
+    print('Getting image list...')
     # available_files - local list of files
     available_files = get_files_from_directory(data_dir)
     labels = None
-    print 'Getting image list... Done.'
+    print('Getting image list... Done.')
     return available_files, labels
 
 
@@ -201,7 +201,7 @@ def get_files_from_directory(data_dir):
 
 
 def layer_name_to_top_name(net, layer_name):
-    if net.top_names.has_key(layer_name) and len(net.top_names[layer_name]) >= 1:
+    if layer_name in net.top_names and len(net.top_names[layer_name]) >= 1:
         return net.top_names[layer_name][0]
 
     else:

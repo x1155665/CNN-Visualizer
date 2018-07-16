@@ -126,10 +126,10 @@ class CNN_Vis_Demo_Model(QObject):
             if width < height:
                 pad_size = height - width
                 if pad_size % 2 == 0:
-                    icon_squared = cv2.copyMakeBorder(_image, 0, 0, pad_size / 2, pad_size / 2, cv2.BORDER_CONSTANT,
+                    icon_squared = cv2.copyMakeBorder(_image, 0, 0, pad_size // 2, pad_size // 2, cv2.BORDER_CONSTANT,
                                                       value=[0, 0, 0])
                 else:
-                    icon_squared = cv2.copyMakeBorder(_image, 0, 0, pad_size / 2 + 1, pad_size / 2, cv2.BORDER_CONSTANT,
+                    icon_squared = cv2.copyMakeBorder(_image, 0, 0, pad_size // 2 + 1, pad_size // 2, cv2.BORDER_CONSTANT,
                                                       value=[0, 0, 0])
                 return icon_squared
             # icon landscape mode
@@ -137,10 +137,10 @@ class CNN_Vis_Demo_Model(QObject):
                 pad_size = width - height
                 if pad_size % 2 == 0:
                     # top, bottom, left, right
-                    icon_squared = cv2.copyMakeBorder(_image, pad_size / 2, pad_size / 2, 0, 0, cv2.BORDER_CONSTANT,
+                    icon_squared = cv2.copyMakeBorder(_image, pad_size // 2, pad_size // 2, 0, 0, cv2.BORDER_CONSTANT,
                                                       value=[0, 0, 0])
                 else:
-                    icon_squared = cv2.copyMakeBorder(_image, pad_size / 2 + 1, pad_size / 2, 0, 0, cv2.BORDER_CONSTANT,
+                    icon_squared = cv2.copyMakeBorder(_image, pad_size // 2 + 1, pad_size // 2, 0, 0, cv2.BORDER_CONSTANT,
                                                       value=[0, 0, 0])
                 return icon_squared
             elif height == width:
@@ -155,11 +155,11 @@ class CNN_Vis_Demo_Model(QObject):
             h, w, c = _image.shape
             l = min(h, w)
             if (h + l) % 2 != 0:
-                _image = _image[(h - l + 1) / 2:(h + l + 1) / 2, :, :]
+                _image = _image[(h - l + 1) // 2:(h + l + 1) // 2, :, :]
             elif (w + l) % 2 != 0:
-                _image = _image[:, (w - l + 1) / 2:(w + l + 1) / 2, :]
+                _image = _image[:, (w - l + 1) // 2:(w + l + 1) // 2, :]
             else:
-                _image = _image[(h - l) / 2:(h + l) / 2, (w - l) / 2:(w + l) / 2, :]
+                _image = _image[(h - l) // 2:(h + l) // 2, (w - l) // 2:(w + l) // 2, :]
             return _image
 
         if video:
@@ -322,7 +322,7 @@ class CNN_Vis_Demo_Model(QObject):
 
     def _get_layers_info(self):
         """
-        Get the layer names / output sizes / 'data' blob name / input dimension
+        Get the layer names / output sizes / 'data' blob name / 'prob' blob name / input dimension
         :return:
         """
         self._layer_list = []

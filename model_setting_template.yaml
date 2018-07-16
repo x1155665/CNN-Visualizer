@@ -38,7 +38,7 @@ search_min: false  # not used
 
 # crop_max_patxhes.py options
 # (One of them must be true)
-max_tracker_do_maxes: false
+max_tracker_do_maxes: true
 max_tracker_do_deconv: false
 max_tracker_do_deconv_norm: true
 max_tracker_do_backprop: false

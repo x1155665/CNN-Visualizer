@@ -6,7 +6,7 @@ import os
 from jby_misc import WithTimer
 from max_tracker import scan_images_for_maxes
 from misc import mkdir_p
-import cPickle as pickle
+import pickle as pickle
 from misc import load_network
 import argparse
 

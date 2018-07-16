@@ -45,7 +45,7 @@ def main():
 
     for layer_name in settings.layers_to_output_in_offline_scripts:
 
-        print 'Started work on layer %s' % (layer_name)
+        print('Started work on layer %s' % (layer_name))
 
         mt = nmt.max_trackers[layer_name]
 

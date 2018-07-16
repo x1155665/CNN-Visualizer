@@ -296,7 +296,7 @@ class LayerViewWidget(QScrollArea):
         self.n_h = np.ceil(N / self.n_w)
 
         positions = [(i, j) for i in range(int(self.n_h)) for j in range(int(self.n_w))]
-        for position, unit in itertools.izip(positions, units):
+        for position, unit in zip(positions, units):
             unitView = SmallUnitViewWidget()
             unitView.clicked.connect(self.unit_clicked_action)
             unitView.index = position[0] * self.n_w + position[1]
