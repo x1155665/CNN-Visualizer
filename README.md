@@ -26,16 +26,26 @@ In the very beginning, this tool was intended for VGG16. Support for other VGG16
 Non-sequential networks are not supported.    
  
 ## Setting up
-While the "master" branch runs with python2, the "py3" branch runs with python3. 
 ### 1. Get PyQt running.
 You may need to install [Qt5](https://www.qt.io/download), [SIP](https://www.riverbankcomputing.com/software/sip/download) and [PyQt5](https://www.riverbankcomputing.com/software/pyqt/download5).
-
-For python3, you can use pip3 to install SIP and PyQt5:
+#### Install Qt5
+You can use the following command to check if Qt5 is already installed on your computer:
+```
+qmake --version
+```
+If Qt5 is not yet installed, you can get it from [the official website of Qt](https://www.qt.io/download) or install it from your linux distribution’s repositories.
+On ubuntu:
+```
+sudo apt-get install build-essential
+sudo apt-get install qt5-default
+```
+#### Install SIP and PyQt5
+If you want to run the tool on python3, you can use pip3 to install SIP and PyQt5:
 ```
 pip3 install PyQt5-sip
 pip3 install PyQt5
 ```
-For python2, you have to download the source of [SIP](https://www.riverbankcomputing.com/software/sip/download) and [PyQt5](https://www.riverbankcomputing.com/software/pyqt/download5), then install the package by running:
+For python2, you have to download the source of [SIP](https://www.riverbankcomputing.com/software/sip/download) and [PyQt5](https://www.riverbankcomputing.com/software/pyqt/download5), then install the packages by running:
 ```
 python2 configure.py
 make 
@@ -53,6 +63,8 @@ make all pycaffe
 ```
 
 ### 3. Download and configure the CNN visualizer
+While the "master" branch runs with python2, the "py3" branch runs with python3. Please download the version you want. 
+
 Change the general settings in _main_settings.yaml_. 
 
 Use _model_setting_template.yaml_ as template to create settings file for the new model and then register this file in _main_settings.yaml_ 
