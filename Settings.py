@@ -25,7 +25,6 @@ class Settings:
         with open(self.main_settings['Model_config_path'][model_name]) as fp:
             configs = yaml.load(fp)
         self.network_weights = configs['network_weights']
-        self.prototxt = configs['prototxt']
         self.label_file = configs['label_file']
         self.input_image_path = configs['input_image_path'] if 'input_image_path' in configs else None
         self.deepvis_outputs_path = configs['deepvis_outputs_path'] if 'deepvis_outputs_path' in configs else None

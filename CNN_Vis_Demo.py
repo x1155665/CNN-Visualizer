@@ -2,7 +2,7 @@ import sys
 from PyQt5.QtWidgets import QApplication
 
 from CNN_Vis_Demo_View import CNN_Vis_Demo_View
-from CNN_Vis_Demo_Model import  CNN_Vis_Demo_Model
+from CNN_Vis_Demo_Model_PyTorch import  CNN_Vis_Demo_Model
 from CNN_Vis_Demo_Ctl import CNN_Vis_Demo_Ctl
 
 if __name__ == '__main__':

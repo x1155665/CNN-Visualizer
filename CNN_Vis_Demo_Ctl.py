@@ -18,11 +18,6 @@ class CNN_Vis_Demo_Ctl(QThread):
 
     def run(self):
         """ ops must be run here to avoid conflict """
-        sys.path.insert(0, os.path.join(self.model.caffevis_caffe_root, 'python'))
-        import caffe
-        if self.model.settings.use_GPU:
-            caffe.set_mode_gpu()  # otherwise caffe will run with cpu in this thread
-            caffe.set_device(self.settings.gpu_id)
         while True:
             if self.FLAG_set_model:
                 self._set_model(self.model_name)

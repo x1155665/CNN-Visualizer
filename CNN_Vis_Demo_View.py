@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (QMainWindow, QDesktopWidget, QLabel, QComboBox, QTa
                              QRadioButton, QGroupBox, QScrollArea, QFrame)
 from enum import Enum
 
-from CNN_Vis_Demo_Model import CNN_Vis_Demo_Model
+from CNN_Vis_Demo_Model_PyTorch import CNN_Vis_Demo_Model
 
 BORDER_WIDTH = 10
 
@@ -49,7 +49,7 @@ class DetailedUnitViewWidget(QLabel):
         supported working modes
         """
         ACTIVATION = 'Activation'
-        DECONV = 'Deconv'
+        # DECONV = 'Deconv'
 
     class BackpropViewOption(Enum):
         """
@@ -377,6 +377,7 @@ class ProbsView(QGroupBox):
     def set_probs(self, probs, labels):
         num = min(5, len(probs))
         self.model.setRowCount(num)
+
         sorted_results_idx = sorted(range(len(probs)), reverse=True, key=lambda k: probs[k])
         for i in range(num):
             self.model.setItem(i,0, QStandardItem('%s' % labels[sorted_results_idx[i]]))
@@ -650,7 +651,7 @@ class CNN_Vis_Demo_View(QMainWindow):
         """
         if data_idx == CNN_Vis_Demo_Model.data_idx_input_image_names:
             self.update_combobox_input_image()
-        elif data_idx == CNN_Vis_Demo_Model.data_idx_layer_names:
+        elif data_idx == CNN_Vis_Demo_Model.data_idx_layer_info:
             self.draw_network_overview()
             self.combo_input_source.setEnabled(True)  # enable source switching after the model is fully loaded
             self.combo_input_image.setEnabled(True)
@@ -826,15 +827,14 @@ class CNN_Vis_Demo_View(QMainWindow):
         # draw new layout
         vbox_network = QVBoxLayout()
         vbox_network.setAlignment(Qt.AlignCenter)
-        layer_names = self.model.get_data(CNN_Vis_Demo_Model.data_idx_layer_names)
-        layer_output_sizes = self.model.get_data(CNN_Vis_Demo_Model.data_idx_layer_output_sizes)
+        layer_info = self.model.get_data(CNN_Vis_Demo_Model.data_idx_layer_info)
         # todo: change the style of layers
-        for layer_name in layer_names:
+        for layer_name in layer_info.keys():
             btn_layer = QRadioButton(layer_name)
             btn_layer.setFont(QFont('Helvetica', 11, QFont.Bold))
             btn_layer.toggled.connect(self.select_layer_action)
             vbox_network.addWidget(btn_layer)
-            size = layer_output_sizes[layer_name]
+            size = layer_info[layer_name]
             size_string = ''
             for value in size:
                 size_string += str(value)
